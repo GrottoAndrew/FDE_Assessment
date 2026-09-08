@@ -413,3 +413,81 @@ the audit log, or the eval run.
 - [ ] one deliberate escalation shown on purpose (ambiguous ticker, or crossed quote)
 - [ ] one WSP flag fired on a recommendation-shaped question, visible in `ops.flag`
 - [ ] one failure shown failing loudly, with `ops.failure_log` and no substituted default
+
+---
+
+## 10. The NVDA polling slice
+
+`scripts/poll_nvda.py` — one cycle per invocation, driven by cron rather than a
+long-lived process. 16 tests, run against recorded payloads.
+
+### The two URLs in the brief are JavaScript shells
+
+Both render client-side; fetching them returns an empty app frame. The endpoints
+those pages call are what the poller uses:
+
+| brief | actual data endpoint |
+|---|---|
+| `sec.gov/edgar/browse/?CIK=1045810` | `data.sec.gov/submissions/CIK0001045810.json` |
+| `finance.yahoo.com/chart/NVDA#<blob>` | `query1.finance.yahoo.com/v8/finance/chart/NVDA` |
+
+The base64 blob decodes to a UI layout — 1-minute bars, regular session only,
+split/dividend adjusted, America/New_York — reproduced verbatim in `CHART_PARAMS`.
+
+### The schedule does not fit the cap
+
+    make pollplan IV=15 CAP=500
+    polls/day 27 · trading days 21 · polls/month 567 · cap 500
+    VERDICT  DOES NOT FIT — 67 calls over, before a single advisor request
+
+09:30–16:00 at 15-minute spacing is 27 polls a day, 567 a month, for one symbol.
+`--once` refuses to start on a schedule that cannot stay under the cap, rather
+than discovering it on the 25th. Three ways out, in order of preference:
+
+1. Raise `QUOTE_MONTHLY_CALL_LIMIT` to ≥ 667 (567 + headroom for ad-hoc asks).
+2. Poll every 20 minutes: 420/month, 80 calls of headroom — thin.
+3. Keep 15 minutes and accept that pacing refuses the last few polls each day.
+
+At 15-minute spacing the cache never helps the poller itself (TTL 60s), but it
+covers every advisor request landing between ticks, and that is where the
+headroom goes.
+
+### What this source cannot do
+
+**No bid, no ask, no spread.** The chart endpoint returns last, previous close,
+and OHLCV. The desk's headline feature — bid/ask/spread — is not servable from
+it. `quote_snapshot_agent` returns INDETERMINATE for those fields rather than
+deriving a spread from OHLC, which would be a fabricated number wearing a real
+timestamp. Golden case `NVDA-002`. This is a capability gap against the brief,
+not a formatting one, and it closes only with the entitled feed.
+
+Also absent: halt status, and prices arrive **adjusted** (the layout sets
+`adj: true`), so a cached prior close silently changes after a split — gap G-10
+with a live instance.
+
+### EDGAR costs almost nothing if asked correctly
+
+Conditional GET with `If-None-Match`/`If-Modified-Since`. One issuer files a few
+times a month, so nearly every 15-minute poll returns 304 — no body, no parsing,
+no quota. `EDGAR_USER_AGENT` is mandatory and the poller refuses to run without
+it; the SEC fair-access policy requires a declared identity, and running without
+one risks the firm's IP rather than the script.
+
+### Not run here
+
+This container's egress policy returns 403 CONNECT for `data.sec.gov`,
+`www.sec.gov`, `query1.finance.yahoo.com`, and `finance.yahoo.com`, on both the
+direct and the WebFetch path. No live pull happened. The poller is proven
+offline against recorded payloads and needs one run on a machine with egress
+before any number from it is quoted.
+
+### Two bugs the tests caught
+
+1. **Pacing starvation.** Recomputing the daily cap from the live balance after
+   each spend shrinks it as the day is spent: 500 over 27 days gives 18, but
+   after 17 calls the same formula gives 17 and refuses the 18th. Fixed to
+   compute from the start-of-day balance.
+2. **A cache that cron erases.** The budget's cache lived in process memory. A
+   cron-invoked poller is a new process every tick, so the TTL never fired and
+   every tick spent a call it did not have to. The cache is now serialized into
+   `eval_output/.poll_state.json` with the counters.

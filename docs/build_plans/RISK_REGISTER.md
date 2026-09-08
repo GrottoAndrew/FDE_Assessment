@@ -20,6 +20,9 @@ is a gap someone else finds for you.
 | A10 | Rule 612 tick size | implemented as originally adopted ($0.01 / $0.0001); the 2024 half-cent amendment is **not** implemented | quotes for tick-constrained names would fail the CHECK once that regime is operative | **open — confirm compliance date** |
 | A11 | Interim quote source terms of use | prototype-only input with an expiry date; not a commercial redistribution license | the entitled feed is a hard dependency for production, not an upgrade | ADR-0008 |
 | A12 | Backend | local Postgres only; Supabase removed from `.mcp.json` and `.env.example` | none for the prototype; hosted deployment is a separate decision | sponsor, 2026-09-08 |
+| A14 | Live egress in this environment | **blocked**: 403 CONNECT for sec.gov, data.sec.gov, and both Yahoo hosts | no live pull has run; the poller is proven only against recorded payloads | confirmed by proxy status |
+| A15 | bid / ask / spread from the interim source | **unavailable**: the chart endpoint has no quote book; INDETERMINATE is returned rather than an OHLC-derived spread | the desk's headline feature does not work until the entitled feed lands | NVDA-002, ADR-0008 |
+| A16 | Adjusted vs raw prices | the chart layout requests split/dividend adjusted prices | a cached prior close silently changes after a split, and nothing here detects it | **open — G-10** |
 | A13 | News causality | headlines are candidate links with a stated basis; `news.candidate_link.asserted` is pinned false by CHECK | without a relevancy/reranking model, any asserted cause is a guess wearing a citation | NEWS-501 |
 
 ## Standing risks in this architecture

@@ -1,4 +1,4 @@
-.PHONY: help setup test tdd eval evalq golden schema seed lint deck preflight cost clean
+.PHONY: help setup test tdd eval evalq golden schema seed lint deck preflight cost poll pollplan clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -32,6 +32,12 @@ evalq:   ## quick smoke eval (tier=smoke only)
 
 deck:    ## regenerate the presentation prompt now (normally every 5th turn)
 	python3 scripts/turn_tick.py --force
+
+pollplan: ## budget arithmetic for the NVDA schedule — no network
+	.venv/bin/python scripts/poll_nvda.py --plan --interval $(or $(IV),15) --cap $(or $(CAP),500)
+
+poll:    ## one NVDA poll cycle (EDGAR + delayed price), recording golden fixtures
+	.venv/bin/python scripts/poll_nvda.py --once --record --interval $(or $(IV),15) --cap $(or $(CAP),500)
 
 clean:
 	rm -rf .venv .pytest_cache __pycache__ eval_output/*/raw

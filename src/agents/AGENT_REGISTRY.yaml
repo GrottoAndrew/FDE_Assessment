@@ -213,7 +213,9 @@ agents:
       - "A halted security returns INDETERMINATE with the halt flag, never a last price presented as current."
       - "Symbols resolve through md.security by FIGI. A ticker is never a cache key."
       - "Budget exhausted returns FAILED via src/common/quote_budget.py. A stale quote is never relabeled as current."
+      - "The interim source carries no quote book. A bid, ask, or spread request returns INDETERMINATE; a spread derived from OHLC is a fabricated number with a real timestamp."
     escalate_when:
+      - "the request asks for bid, ask, or spread while the source is the interim chart endpoint"
       - "the symbol resolves to zero or more than one active security"
       - "the freshest snapshot is older than the configured staleness ceiling"
       - "the book is crossed or the security is halted"
