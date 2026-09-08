@@ -25,6 +25,7 @@ structure, guardrails, and evaluation harness survive any problem statement.
 | know why anything is the way it is | [`docs/adr/`](docs/adr/) |
 | present the thing | [`docs/presentation/PRESENTATION_PROMPT.txt`](docs/presentation/PRESENTATION_PROMPT.txt) *(auto-generated)* |
 
+    make preflight  # morning-of checks: key, DB, tests, git, MCP, deck prompt
     make setup      # venv + pytest + pyyaml
     make tdd        # contract tests — 0.1s, no DB, no model
     make eval       # golden set + drift vs baseline
@@ -158,6 +159,8 @@ generator to say "not measured" rather than estimate any number absent from
 
 ## Before the sprint: verify
 
-    make setup && make tdd && make eval && make deck
+    make setup && make preflight
 
-All four must be green. If they are, minute 0 is spent on the problem.
+`preflight` exits non-zero on anything blocking and prints the fix — a bad API
+key, an unreachable database, a dirty tree, a missing deck prompt. If it exits
+clean, minute 0 is spent on the problem instead of on setup.
