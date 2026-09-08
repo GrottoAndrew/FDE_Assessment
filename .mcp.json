@@ -1,8 +1,4 @@
 {
-  "mcpServers": {
-    "supabase": {
-      "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=krnkvkunhwwfdqeqnikg&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching"
-    }
-  }
+  "$comment": "Supabase removed 2026-09-08 (sponsor decision): this sprint runs against local Postgres only. Restore the server entry when a hosted backend comes back into scope.",
+  "mcpServers": {}
 }

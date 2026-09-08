@@ -55,28 +55,59 @@ GRANT USAGE ON SCHEMA core, ops TO agent_heuristic;
 GRANT SELECT ON core.entity, core.account, core.v_entity_resolved TO agent_heuristic;
 GRANT INSERT ON ops.audit_log, ops.hitl_queue TO agent_heuristic;
 
--- --- DOMAIN AGENTS (illustrative; regenerate from the registry) -------------
+-- --- DOMAIN AGENTS (advisor desk) -------------------------------------------
 -- Pattern: SELECT only on the tables in data_scope; INSERT only on write_scope.
-
--- These reference the domain schema, which does not exist until sprint day.
--- Guarded so 003 applies cleanly against a bare canonical layer; the grants
--- land automatically once 004_domain.sql has been applied.
+-- Guarded so 003 applies cleanly before 004; re-run 003 after 004 lands.
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'sales') THEN
-        PERFORM ops.ensure_role('agent_order_tracking');
-        EXECUTE 'GRANT agent_base TO agent_order_tracking';
-        EXECUTE 'GRANT USAGE ON SCHEMA sales TO agent_order_tracking';
-        EXECUTE 'GRANT SELECT ON sales.order, sales.shipment TO agent_order_tracking';
-        -- no core.*, no ops.*, no writes: it answers one question about one order
+    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'md') THEN
 
-        PERFORM ops.ensure_role('agent_email_response');
-        EXECUTE 'GRANT agent_base TO agent_email_response';
-        EXECUTE 'GRANT USAGE ON SCHEMA core, sales TO agent_email_response';
-        EXECUTE 'GRANT SELECT ON core.contact, sales.activity TO agent_email_response';
-        -- no INSERT anywhere: this agent structurally cannot send. A human sends.
+        -- quote_snapshot_agent: market data only. No positions, no core.*, no writes.
+        PERFORM ops.ensure_role('agent_quote_snapshot');
+        EXECUTE 'GRANT agent_base TO agent_quote_snapshot';
+        EXECUTE 'GRANT USAGE ON SCHEMA md TO agent_quote_snapshot';
+        EXECUTE 'GRANT SELECT ON md.security, md.v_quote_latest, md.quote_call_budget TO agent_quote_snapshot';
+
+        -- orion_position_agent: positions only. It cannot read a live quote, so it
+        -- structurally cannot compute an intraday notional.
+        PERFORM ops.ensure_role('agent_orion_position');
+        EXECUTE 'GRANT agent_base TO agent_orion_position';
+        EXECUTE 'GRANT USAGE ON SCHEMA pos, md, core TO agent_orion_position';
+        EXECUTE 'GRANT SELECT ON pos.position_snapshot, md.security, core.v_entity_resolved TO agent_orion_position';
+
+        -- filing_fact_agent: EDGAR only. No market data, no client data.
+        PERFORM ops.ensure_role('agent_filing_fact');
+        EXECUTE 'GRANT agent_base TO agent_filing_fact';
+        EXECUTE 'GRANT USAGE ON SCHEMA edgar TO agent_filing_fact';
+        EXECUTE 'GRANT SELECT ON edgar.filing, edgar.xbrl_fact TO agent_filing_fact';
+
+        -- macro_news_scan_agent: news + the security master to resolve a link basis.
+        PERFORM ops.ensure_role('agent_macro_news_scan');
+        EXECUTE 'GRANT agent_base TO agent_macro_news_scan';
+        EXECUTE 'GRANT USAGE ON SCHEMA news, md TO agent_macro_news_scan';
+        EXECUTE 'GRANT SELECT ON news.source, news.headline, news.candidate_link, md.security TO agent_macro_news_scan';
+
+        -- advisor_answer_agent: NOTHING. data_scope is [] and this is where that
+        -- becomes a control instead of a claim. It receives rows; it cannot fetch,
+        -- cannot write, cannot send. Golden cases ANS-601, ANS-602, SCP-501.
+        PERFORM ops.ensure_role('agent_advisor_answer');
+        -- deliberately no GRANT of agent_base and no USAGE on any schema
+
+        -- wsp_flag_agent: the only writer of ops.flag. The desk cannot raise or
+        -- clear a flag on its own output (ADR-0006).
+        PERFORM ops.ensure_role('agent_wsp_flag');
+        EXECUTE 'GRANT agent_base TO agent_wsp_flag';
+        EXECUTE 'GRANT USAGE ON SCHEMA wsp, ops TO agent_wsp_flag';
+        EXECUTE 'GRANT SELECT ON wsp.rule, ops.advisor_interaction TO agent_wsp_flag';
+        EXECUTE 'GRANT INSERT ON ops.flag, ops.hitl_queue TO agent_wsp_flag';
+
+        -- failure_triage_agent: reads what failed, escalates, fixes nothing.
+        PERFORM ops.ensure_role('agent_failure_triage');
+        EXECUTE 'GRANT USAGE ON SCHEMA ops TO agent_failure_triage';
+        EXECUTE 'GRANT SELECT ON ops.failure_log, ops.hitl_queue TO agent_failure_triage';
+        EXECUTE 'GRANT INSERT ON ops.hitl_queue TO agent_failure_triage';
     ELSE
-        RAISE NOTICE 'sales schema absent - domain agent roles deferred until 004_domain.sql';
+        RAISE NOTICE 'md schema absent - domain agent roles deferred until 004_domain.sql';
     END IF;
 END $$;
 

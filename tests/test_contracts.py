@@ -55,9 +55,59 @@ def test_write_scopes_are_minimal(registry):
                 f"{a['name']} writes {tbl}; sub-agents write only ops.* sinks"
 
 
-def test_email_agent_cannot_send(registry):
-    a = next(x for x in registry["agents"] if x["name"] == "email_response_agent")
-    assert a.get("write_scope") == [], "a drafting agent with write access can send"
+def test_answer_agent_cannot_fetch_or_send(registry):
+    """The chatbot surface is bounded by construction, not by instruction.
+
+    Empty data_scope means it cannot produce a fact no upstream agent cited.
+    Empty write_scope means it cannot commit, send, or clear anything. Both are
+    structural guarantees; a prompt saying "only use the provided rows" is not.
+    """
+    a = next(x for x in registry["agents"] if x["name"] == "advisor_answer_agent")
+    assert a["data_scope"] == [], "an answer agent that can fetch can invent an uncited fact"
+    assert a["write_scope"] == [], "an answer agent with write access can commit or send"
+
+
+def test_every_agent_declares_a_model(registry):
+    """G-14: model routing lived in cost_model.py while the registry knew nothing
+    about it. Two sources of truth drift, and the ROI slide then describes a
+    system that does not exist."""
+    allowed = set(registry["meta"]["model_tiers"])
+    for a in registry["agents"]:
+        assert a.get("model") in allowed, \
+            f"{a['name']} declares model {a.get('model')!r}, not in {sorted(allowed)}"
+    for o in registry["orchestrators"]:
+        assert o.get("model") in allowed, f"{o['name']} declares no valid model"
+
+
+def test_opus_is_reserved_for_arbitration_and_falsification(registry):
+    """Sponsor rule: sonnet for every source pull; opus only where a wrong call
+    is a judgment error rather than a retrieval error."""
+    allowed_opus = {"red_team_agent", "discrepancy_agent", "heuristic_override_agent"}
+    for a in registry["agents"]:
+        if a.get("model") == "claude-opus-5":
+            assert a["name"] in allowed_opus, \
+                f"{a['name']} runs on opus but is not an arbitration or falsification agent"
+
+
+def test_every_agent_has_a_cost_profile(registry):
+    """No profile means the unit-cost number is an estimate wearing a table."""
+    for a in registry["agents"]:
+        cp = a.get("cost_profile")
+        assert cp and {"tokens_in", "tokens_out", "share"} <= set(cp), \
+            f"{a['name']} has no cost_profile; its cost cannot be measured"
+        if a["model"] == "none":
+            assert cp["tokens_in"] == 0 and cp["tokens_out"] == 0, \
+                f"{a['name']} claims a deterministic path but bills tokens"
+
+
+def test_only_supervision_writes_the_compliance_flag(registry):
+    """Separation of duties: the desk cannot raise or clear a flag on its own
+    output. ops.flag has exactly one writing silo."""
+    supervision = {o["name"] for o in registry["orchestrators"] if o["domain"] == "supervision"}
+    for a in registry["agents"]:
+        if "ops.flag" in a.get("write_scope", []):
+            assert a["orchestrator"] in supervision, \
+                f"{a['name']} writes ops.flag from outside the supervision silo"
 
 
 def test_system_agents_present(registry):
@@ -77,6 +127,61 @@ def test_each_agent_reports_to_exactly_one_orchestrator(registry):
         names = {o["name"] for o in registry["orchestrators"]}
         assert orch in names, f"{a['name']} reports to unknown orchestrator {orch}"
     assert len(domains) == len(registry["orchestrators"]), "two orchestrators share a domain"
+
+
+def test_orchestrator_call_graph_is_a_tree(registry):
+    """ADR-0006. A parent may call a declared child synchronously; children never
+    call parents and siblings never call each other. Without this the silo is
+    enforced by a comment."""
+    orchs = {o["name"]: o for o in registry["orchestrators"]}
+    agents = {a["name"]: a for a in registry["agents"]}
+
+    parents: dict[str, str] = {}
+    for name, o in orchs.items():
+        for callee in o.get("calls", []):
+            assert callee in orchs or callee in agents, f"{name} calls unknown {callee}"
+            if callee in orchs:
+                assert callee not in parents, \
+                    f"{callee} is called by both {parents[callee]} and {name}; that is a DAG, not a silo"
+                parents[callee] = name
+                assert orchs[callee].get("parent") == name, \
+                    f"{callee} is called by {name} but declares parent {orchs[callee].get('parent')!r}"
+
+    # declared parent and actual caller agree in the other direction too
+    for name, o in orchs.items():
+        declared = o.get("parent")
+        assert declared == parents.get(name), \
+            f"{name} declares parent {declared!r} but is called by {parents.get(name)!r}"
+
+    # no cycles: walk to the root from every node
+    for name in orchs:
+        seen, cur = set(), name
+        while cur is not None:
+            assert cur not in seen, f"cycle in the orchestrator graph at {cur}"
+            seen.add(cur)
+            cur = orchs[cur].get("parent")
+
+
+def test_no_orchestrator_reaches_into_another_silo(registry):
+    """A domain agent is callable only by the orchestrator it reports to.
+    System agents (orchestrator '*') are callable by any of them."""
+    orchs = {o["name"]: o for o in registry["orchestrators"]}
+    agents = {a["name"]: a for a in registry["agents"]}
+    for name, o in orchs.items():
+        for callee in o.get("calls", []):
+            if callee in agents:
+                owner = agents[callee]["orchestrator"]
+                assert owner in (name, "*"), \
+                    f"{name} calls {callee}, which reports to {owner}. Cross-silo reach-in."
+
+
+def test_every_domain_agent_is_reachable(registry):
+    """An agent in the registry that no orchestrator calls is dead scaffolding,
+    and dead scaffolding is what an interviewer finds."""
+    called = {c for o in registry["orchestrators"] for c in o.get("calls", [])}
+    for a in registry["agents"]:
+        if a.get("kind") == "domain":
+            assert a["name"] in called, f"{a['name']} is unreachable: no orchestrator calls it"
 
 
 def test_orchestrators_declare_cross_domain_policy(registry):
@@ -198,3 +303,58 @@ def test_iso_tables_exist(root):
     sql = (root / "src/data/schema/001_iso_reference.sql").read_text()
     for t in ("iso.country", "iso.currency", "iso.language", "iso.subdivision"):
         assert f"CREATE TABLE IF NOT EXISTS {t}" in sql, f"missing ISO table {t}"
+
+
+# --- money and provenance ----------------------------------------------------
+def test_exactly_one_money_representation(root):
+    """ADR-0007. One type across the store, the API, and the UI so nothing has to
+    translate on the way through. Two money types is a defect class."""
+    canonical = (root / "src/data/schema/002_canonical.sql").read_text()
+    assert "CREATE DOMAIN core.money AS numeric" in canonical, "core.money is missing"
+    assert "money_minor" not in canonical, "the minor-unit type survived; that is a second money rule"
+    for sql in (root / "src/data/schema").glob("*.sql"):
+        body = sql.read_text()
+        assert "money_minor" not in body, f"{sql.name} still references money_minor"
+
+
+def test_quote_increments_are_rule612_checked(root):
+    sql = (root / "src/data/schema/004_domain.sql").read_text()
+    assert "core.is_rule612_increment(bid)" in sql and "core.is_rule612_increment(ask)" in sql, \
+        "quotations must be constrained to Rule 612 increments"
+    assert "is_rule612_increment(last)" not in sql, \
+        "executions may print sub-penny through price improvement; constraining last is wrong"
+
+
+def test_every_external_price_carries_its_provenance(root):
+    """A price without source, venue timestamp, and delay is not a value."""
+    sql = (root / "src/data/schema/004_domain.sql").read_text()
+    for col in ("source", "delay_seconds", "as_of_at_utc", "retrieved_at_utc"):
+        assert col in sql, f"md.quote_snapshot must carry {col}"
+
+
+def test_news_links_cannot_be_promoted_to_asserted_causes(root):
+    """Relevancy ranking is out of scope, so nothing may claim causation."""
+    sql = (root / "src/data/schema/004_domain.sql").read_text()
+    assert "asserted" in sql and "CHECK (asserted = false)" in sql, \
+        "news.candidate_link.asserted must be pinned false while ranking is out of scope"
+
+
+def test_the_advisor_surface_is_internal_only(root):
+    sql = (root / "src/data/schema/004_domain.sql").read_text()
+    assert "CHECK (channel IN ('internal_chat'))" in sql, \
+        "an internal-only surface must be enforced by a CHECK, not by scope prose"
+
+
+def test_golden_cases_reference_agents_that_exist(registry, golden):
+    """A case pointed at a deleted agent passes forever without testing anything."""
+    known = {a["name"] for a in registry["agents"]} | {o["name"] for o in registry["orchestrators"]}
+    for c in golden:
+        assert c["agent"] in known, f"{c['id']} targets unknown agent {c['agent']}"
+
+
+def test_golden_set_covers_every_orchestrator(registry, golden):
+    targeted = {c["agent"] for c in golden}
+    for o in registry["orchestrators"]:
+        if o.get("status") == "stub":
+            continue
+        assert o["name"] in targeted, f"{o['name']} has no golden case; its routing is untested"

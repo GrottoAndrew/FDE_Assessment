@@ -30,6 +30,11 @@ block:
     when: "request asks the system to infer or segment on a protected characteristic"
     reason: "Disparate-impact risk that a prototype cannot evaluate."
 
+  - id: BLK-005
+    name: client_facing_output
+    when: "request asks for output formatted to send, forward, or show to a client"
+    reason: "This surface is internal-only by construction (ops.advisor_interaction.channel CHECK). A client-facing communication is a supervised artifact, and that suite is not built."
+
 # --- ASK: one clarifying question, then proceed -------------------------------
 ask_sensitive:
   - id: ASK-101
@@ -67,6 +72,16 @@ ask_indeterminate:
     name: missing_join_key
     when: "the query needs a join on a key that is null or absent for the target rows"
     question: "No {key} links these tables for this row. Confirm the relationship?"
+
+  - id: ASK-206
+    name: price_basis_unspecified
+    when: "a price request states neither a current basis nor a prior-close basis"
+    question: "Current quote, or the prior close from the Orion reconciliation?"
+
+  - id: ASK-207
+    name: stale_quantity_for_a_live_notional
+    when: "a notional request would multiply a T-1 reconciled quantity by a live price"
+    question: "Quantity is reconciled through {as_of_date}. Use it, or wait for today's file?"
 
 # --- What a gate must never do ------------------------------------------------
 prohibitions:

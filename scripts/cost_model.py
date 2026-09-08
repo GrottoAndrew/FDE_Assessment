@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 
 # $ per 1M tokens: (input, output, cache_write_5m, cache_read)
 PRICES = {
@@ -22,27 +23,30 @@ PRICES = {
     "claude-fable-5":   (10.00, 50.00, 12.50, 1.00),
 }
 
-# agent -> (tier, model, input_tokens, output_tokens, share_of_traffic)
-# Token profiles are estimates for a sales-domain build; replace with measured
-# values from eval_output/ once the system is real.
-AGENTS = [
-    # TIER 1 — deterministic lookup / classification. No judgment required.
-    ("gate_agent",               1, "claude-haiku-4-5",  600,   80, 1.00),
-    ("order_tracking_agent",     1, "claude-haiku-4-5",  800,  150, 0.22),
-    ("crm_monitor_agent",        1, "claude-haiku-4-5", 1200,  200, 0.08),
-    # TIER 2 — structured reasoning over a bounded row set, or drafting.
-    ("appointment_setting_agent",2, "claude-sonnet-5",  1500,  300, 0.12),
-    ("email_response_agent",     2, "claude-sonnet-5",  2500,  600, 0.20),
-    ("call_prep_agent",          2, "claude-sonnet-5",  4000,  900, 0.10),
-    ("funnel_cadence_agent",     2, "claude-sonnet-5",  1200,  250, 0.14),
-    ("sales_analytics_agent",    2, "claude-sonnet-5",  2000,  400, 0.09),
-    ("refund_eligibility_agent", 2, "claude-sonnet-5",  1400,  250, 0.05),
-    # TIER 3 — adversarial judgment, conflict resolution, orchestration.
-    ("discrepancy_agent",        3, "claude-opus-5",    3000,  500, 0.06),
-    ("red_team_agent",           3, "claude-opus-5",    3500,  400, 0.30),
-    ("heuristic_override_agent", 3, "claude-opus-5",    1500,  300, 0.15),
-    ("sales_orchestrator",       3, "claude-opus-5",    5000,  800, 1.00),
-]
+# Routing and token profiles are READ FROM THE REGISTRY, not restated here.
+# Two sources of truth drift, and a drifted ROI slide describes a system that
+# does not exist (gap G-14). `model: none` agents are deterministic code paths
+# and cost zero tokens by construction.
+PRICES["none"] = (0.0, 0.0, 0.0, 0.0)
+
+REGISTRY = Path(__file__).resolve().parent.parent / "src/agents/AGENT_REGISTRY.yaml"
+
+
+def load_agents() -> list[tuple]:
+    """(name, tier, model, tokens_in, tokens_out, share) straight from the registry."""
+    import yaml
+    reg = yaml.safe_load(REGISTRY.read_text())
+    tier_of = {"none": 0, "claude-haiku-4-5": 1, "claude-sonnet-5": 2, "claude-opus-5": 3}
+    out = []
+    for node in list(reg["agents"]) + list(reg["orchestrators"]):
+        model = node["model"]
+        cp = node.get("cost_profile") or {"tokens_in": 5000, "tokens_out": 800, "share": 1.00}
+        out.append((node["name"], tier_of.get(model, 3), model,
+                    cp["tokens_in"], cp["tokens_out"], cp["share"]))
+    return out
+
+
+AGENTS = load_agents()
 
 CACHE_HIT_RATE = 0.70   # system prompt + tool schemas + policy YAML are stable
 
@@ -144,7 +148,7 @@ def sensitivity(volume: int) -> None:
         "routed + caching (as designed)":
             {a[0]: a[2] for a in AGENTS},
         "routed + caching, orchestrator on Sonnet":
-            {a[0]: ("claude-sonnet-5" if a[0] == "sales_orchestrator" else a[2])
+            {a[0]: ("claude-sonnet-5" if a[0].endswith("_orchestrator") else a[2])
              for a in AGENTS},
     }
     print("\n\nSENSITIVITY — same traffic, four configurations")

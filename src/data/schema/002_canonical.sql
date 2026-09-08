@@ -85,7 +85,32 @@ CREATE TABLE IF NOT EXISTS core.dim_date (
 -- ---------------------------------------------------------------------------
 -- MONEY: never a bare number. Amount and its ISO-4217 code travel together.
 -- ---------------------------------------------------------------------------
-CREATE DOMAIN core.money_minor AS bigint;   -- store in minor units; avoid float
+-- ONE money representation, everywhere. Chosen so the store, the API, and the
+-- UI hold the same value with no translation step (ADR-0007).
+--   * numeric, never float: floats do not represent money.
+--   * scale 6: SEC Rule 612 quotes sub-$1 securities in $0.0001 increments, so
+--     a 2-decimal minor-unit integer cannot hold a lawful bid. 6 leaves room
+--     for FX and per-share averages without a second type.
+--   * every amount still travels with its ISO-4217 code. A bare number is a defect.
+--   * serialize as a JSON *string*, not a JSON number — IEEE-754 loses the tail.
+CREATE DOMAIN core.money AS numeric(20,6);
+
+-- Rule 612 minimum pricing increments. Applies to QUOTATIONS (bid/ask), not to
+-- executions: a trade may print sub-penny through price improvement, a quote
+-- may not. Enforced on md.quote_snapshot's bid/ask in 004_domain.sql.
+CREATE OR REPLACE FUNCTION core.is_rule612_increment(px numeric)
+RETURNS boolean AS $$
+    SELECT CASE
+        WHEN px IS NULL      THEN true
+        WHEN px <= 0         THEN false
+        WHEN px < 1.00       THEN (px * 10000) = trunc(px * 10000)   -- $0.0001
+        ELSE                      (px * 100)   = trunc(px * 100)     -- $0.01
+    END;
+$$ LANGUAGE sql IMMUTABLE;
+COMMENT ON FUNCTION core.is_rule612_increment(numeric) IS
+  'SEC Rule 612 quotation increments as originally adopted. The 2024 tick-size '
+  'amendments add a $0.005 increment for tick-constrained NMS stocks; confirm '
+  'the operative compliance date before relaxing this (RISK: A10).';
 
 -- ---------------------------------------------------------------------------
 -- OPS: the tables that make guardrails observable

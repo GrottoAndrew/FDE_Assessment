@@ -1,6 +1,6 @@
 # ADR-0006: Synchronous parent→child orchestration, with supervision as its own silo
 
-Status: proposed
+Status: accepted
 Date: 2026-09-08
 Decider: Andrew Nelson
 Time spent: 10
@@ -30,6 +30,9 @@ now needs a call-graph test, and a parent failure cascades to its children.
 **We revisit when:** a fourth domain appears, or a child needs a sibling's output.
 
 ## Evidence
-Needs `tests/test_contracts.py::test_orchestrator_calls_are_acyclic` and
-`::test_only_supervision_writes_ops_flag`. Unwritten as of this ADR — the
-decision is proposed, not in force.
+`tests/test_contracts.py::test_orchestrator_call_graph_is_a_tree`,
+`::test_no_orchestrator_reaches_into_another_silo`,
+`::test_only_supervision_writes_the_compliance_flag`,
+`::test_every_domain_agent_is_reachable`. Golden cases `SIL-801` (the desk hands
+off a supervision observation without acting) and `SIL-802` (research does not
+reach into market data).

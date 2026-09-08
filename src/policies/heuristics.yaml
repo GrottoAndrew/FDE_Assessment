@@ -16,37 +16,24 @@ version: 1
 
 rules:
   - id: HEU-001
-    name: corporate_card_refund_grace
-    supersedes: refund_eligibility_agent
+    name: orion_close_is_authoritative_for_a_held_position
+    supersedes: quote_snapshot_agent
     when:
       all:
-        - "decision.eligible == false"
-        - "decision.reason == 'outside_30_day_window'"
-        - "context.payment.instrument_type == 'corporate_credit_card'"
-        - "context.order.age_days <= 90"
+        - "decision.field == 'prev_close'"
+        - "context.intent == 'prior_close'"
+        - "context.position.orion_account_id != null"
+        - "context.position.as_of_date == context.request.prior_session_date"
     then:
-      eligible: true
-      reason: "corporate_card_grace"
+      source: "orion"
+      value_from: "pos.position_snapshot.close_price"
     rationale: >
-      CSRs process these regardless of the window because chargeback cost and
-      account-relationship cost both exceed the refund. Documented policy says
-      30 days; actual practice says corporate cards get 90.
-    owner: "CS lead"
+      The desk reconciles to Orion, and the number an advisor reads back to a
+      client has to match the client's statement. When the two disagree on what
+      a held position closed at, the free-tier vendor is the one that is wrong
+      for this purpose. Elicited directly from the sponsor rather than inferred.
+    owner: "Andrew Nelson (sponsor), 2026-09-08"
     confidence: high
-    audit: required
-
-  - id: HEU-002
-    name: strategic_account_escalation
-    supersedes: funnel_cadence_agent
-    when:
-      all:
-        - "context.account.tier == 'strategic'"
-        - "decision.next_touch_channel == 'automated_email'"
-    then:
-      next_touch_channel: "owner_direct"
-    rationale: "Strategic accounts churn on automated touches. Named owner reaches out."
-    owner: "VP Sales"
-    confidence: medium
     audit: required
 
   - id: HEU-003

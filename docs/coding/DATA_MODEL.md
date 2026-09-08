@@ -49,10 +49,21 @@ ISO-8601 is enforced by type rather than by table:
 `tests/test_contracts.py::test_no_text_date_columns` fails the build if any
 column matching `*date*`/`*_at*`/`*timestamp*` is declared `text`.
 
-Currency is stored in **minor units** as `bigint` (`core.money_minor`). Floats
-do not represent money. Every monetary value travels with its ISO-4217 code —
-a bare number is a defect, and `sales_analytics_agent` has a hardcoded rule
-saying so.
+**One money representation, everywhere** (ADR-0007): `core.money` is
+`numeric(20,6)`, and every monetary value travels with its ISO-4217 code. Floats
+do not represent money, and neither do minor-unit integers here — SEC Rule 612
+quotes sub-$1 securities in $0.0001 increments, so a 2-decimal minor unit cannot
+hold a lawful bid. One type across the store, the API, and the UI means nothing
+translates on the way through, and a translation layer is where precision dies.
+
+Serialize as a JSON **string**, never a JSON number: IEEE-754 loses the tail.
+
+Rule 612 increments are enforced on quotations (`md.quote_snapshot.bid`/`ask`)
+by `core.is_rule612_increment`. They are deliberately **not** enforced on `last`:
+a trade may print sub-penny through price improvement, a quote may not.
+
+`iso.currency.minor_unit` survives for display and settlement rounding. It is no
+longer the storage rule.
 
 `core.dim_date` is the conformed date dimension. Every time-series metric joins
 it, so "last quarter" resolves identically for every agent — including ISO
@@ -68,8 +79,33 @@ Add each metric before an agent computes it:
 
 | metric | definition | grain | source | owner |
 |---|---|---|---|---|
-| `revenue` | sum of `sales.order.amount_minor` where `status='fulfilled'` | account × day | `sales.order` | *(TBD sprint day)* |
-| *(add on sprint day)* | | | | |
+| `bid` / `ask` | best quoted price from the configured source at `as_of_at_utc` | security × snapshot | `md.v_quote_latest` | market data |
+| `mid` | `(bid+ask)/2`; **NULL** on a crossed or one-sided book | security × snapshot | `md.v_quote_latest` | market data |
+| `spread_abs` | `ask - bid`, in the security's currency | security × snapshot | `md.v_quote_latest` | market data |
+| `spread_bps` | `(ask-bid)/mid × 10000`, rounded to 2dp; NULL when `mid` is NULL | security × snapshot | `md.v_quote_latest` | market data |
+| `last` | last sale reported by the configured source; **not** an official close | security × snapshot | `md.v_quote_latest` | market data |
+| `prev_close` | Orion's reconciled close for a held position (HEU-001); otherwise the source's prior close | security × session | `pos.position_snapshot` → `md.v_quote_latest` | ops |
+| `quantity` | reconciled share count **as of `as_of_date`**, never as of today | account × security × date | `pos.position_snapshot` | ops |
+| `notional` | `quantity × price`, labeled with **both** as_of values or not returned | account × security | `pos` × `md` | ops |
+
+Undefined here on purpose, and therefore returning ASK-202: `unrealized_pl`
+(needs a cost-basis convention — average, FIFO, or tax lot), `volatility`,
+`liquidity_score`.
+
+## Source precedence
+
+When two sources disagree, higher wins and the divergence is **reported**, never
+silently resolved. Nothing lower ever overwrites something higher.
+
+| rank | source | authoritative for |
+|---|---|---|
+| 1 | entitled exchange feed *(sprint 2)* | real-time price, size, venue timestamp |
+| 2 | clearing firm book of record *(not connected)* | intraday quantity, cash |
+| 3 | Orion | reconciled quantity, cost basis, prior close |
+| 4 | EDGAR | issuer-disclosed facts, cited by `accession_no` |
+| 5 | interim quote source (Yahoo, delayed) | price **only** while rank 1 is absent |
+| 6 | public news | attribution only — never a price, never a quantity, never a cause |
+| 7 | model inference | never a fact; it composes cited facts or it escalates |
 
 This table is the antidote to the most common demo failure: two agents reporting
 different revenue because they filtered differently, and nobody able to say which

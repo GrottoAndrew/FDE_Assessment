@@ -1,8 +1,8 @@
 # Build plan: advisor quote-and-disclosure desk (independent broker-dealer)
 
-Status: **proposed**. Nothing in `src/` has been changed. This plan is written to
-be executed against the existing scaffold (`AGENT_REGISTRY.yaml`, `gating.yaml`,
-`heuristics.yaml`, `tests/test_contracts.py`) without weakening any guardrail.
+Status: **in force**. Sponsor decisions of 2026-09-08 are applied — registry,
+schema, policies, tests, and cost model are updated. `make tdd` 40/40,
+`pytest tests/` 51/51. No guardrail was weakened to get there.
 
 ## The problem, in one sentence
 > An advisor asks for a US equity's current quote, the disclosure or macro event
@@ -18,6 +18,43 @@ be executed against the existing scaffold (`AGENT_REGISTRY.yaml`, `gating.yaml`,
 | Registered rep | "What's my client's position worth?" | high | T-1 share count × live price = wrong after any intraday trade |
 | Supervisory principal | "Which interactions tripped a WSP rule?" | daily | a missed flag is a 3110 finding, not a bug |
 | Ops / platform | "What failed overnight, and did anything fake a result?" | daily | a silent fallback is indistinguishable from a correct answer |
+
+---
+
+## Sponsor decisions applied (2026-09-08)
+
+| gap | decision | where it lives now |
+|---|---|---|
+| G-01 | Build the call-graph test; parent→child synchronous calls stand | ADR-0006 accepted; 4 contract tests; `calls`/`parent` in the registry |
+| G-02 | Delayed Yahoo quotes this sprint, under the monthly cap; entitled feed in sprint 2 | ADR-0008; `src/common/quote_budget.py` + 11 tests; `md.quote_call_budget` |
+| G-07 | One money rule, Rule 612 compliant, no front/back translation | ADR-0007; `core.money` = `numeric(20,6)`; `core.is_rule612_increment` |
+| G-08 | Tie into Orion; live pull on "current", Orion on "prior close" | hardcoded routing rule on the desk orchestrator; HEU-001; ASK-206/207 |
+| G-11 | Reg BI / 2210 out of scope; internal viewing + chat only | `supervision_orchestrator` and `wsp_flag_agent` marked `stub`; `ops.advisor_interaction.channel` CHECK; BLK-005 blocks client-facing output |
+| G-14 | Sonnet default for all source and DB pulls | ADR-0009; `model` on every registry node; `cost_model.py` reads the registry |
+| G-17 | Macro news = general web search over reputable sources; relevancy/reranking out of scope | `macro_news_scan_agent`; `news.source` allowlist; `news.candidate_link.asserted` pinned false |
+| — | Supabase out of scope; local Postgres only | `.mcp.json` emptied, `.env.example` rewritten |
+
+### Where Opus still earns its price
+
+Sonnet handles every retrieval. Opus is reserved for four decisions where being
+wrong is a judgment error rather than a retrieval error, and where the cost of
+the error exceeds the model delta by orders of magnitude:
+
+1. **`discrepancy_agent`** — Orion says 1,200 shares, the feed implies 1,000.
+   Deciding *which source is authoritative for this field* is arbitration.
+2. **`red_team_agent`** — falsifying a claim requires constructing the case
+   against it. A weaker model agrees too easily, and an agreeable red team is
+   worse than none, because it manufactures confidence.
+3. **`heuristic_override_agent`** — it supersedes every other agent's output.
+   The one component allowed to overrule the rest is the wrong place to save.
+4. **`advisor_desk_orchestrator`** — the single commit point, and the only node
+   that sees every sub-agent's output at once, which is where a contradiction is
+   visible at all.
+
+Everything else is retrieval with a schema. Sonnet does that at 40% of the cost,
+and `make cost VOL=5000` puts the routed configuration at ~62% below all-Opus.
+Moving the orchestrator to Sonnet saves another ~9 points — an unmeasured quality
+bet, so it stays unmade.
 
 ---
 
@@ -215,14 +252,14 @@ row, per `authoring_rules`.
 
 These are the things that break this build if they are not decided by a human.
 
-**G-01 · Synchronous Q&A contradicts the silo rule.** The scaffold says
+**G-01 [RESOLVED] · Synchronous Q&A contradicts the silo rule.** The scaffold says
 out-of-domain work is enqueued and dropped. A chatbot turn spanning quote +
 filing + position cannot be async. *Resolution proposed:* declared parent→child
 synchronous calls, with `handoff_queue` reserved for observations. *Needs:* a new
 contract test forbidding cycles and sibling calls, or the silo is enforced by
 comment only.
 
-**G-02 · Real-time bid/ask is a licensing problem, not an engineering one.**
+**G-02 [RESOLVED] · Real-time bid/ask is a licensing problem, not an engineering one.**
 Consolidated real-time quotes require exchange agreements (CTA/UTP, or Nasdaq
 Basic / Cboe One as alternatives), with display vs non-display distinctions and
 per-user reporting — every advisor is a *professional* subscriber. Reg NMS Rule
@@ -231,27 +268,27 @@ context. *Pragmatic path:* source quotes from the clearing firm's existing
 entitled feed rather than signing a new vendor contract. *Needs:* who holds the
 entitlement today — the clearing firm, an existing vendor, or nobody?
 
-**G-03 · EDGAR does not contain prices, and is not timely for moves.** 8-Ks
+**G-03 [OPEN] · EDGAR does not contain prices, and is not timely for moves.** 8-Ks
 arrive within four business days; the price moved this morning. EDGAR as
 *primary source* is correct for disclosure and wrong for causation. The honest
 answer to "why is it down 6%?" is often "no filed disclosure explains this."
 *Needs:* explicit acceptance that "unexplained" is a valid, frequent output.
 
-**G-04 · EDGAR fair-access limits are real.** A declared User-Agent with contact
+**G-04 [OPEN] · EDGAR fair-access limits are real.** A declared User-Agent with contact
 email is required and request rate is capped (~10/s). A fan-out of filing agents
 will get the firm's IP blocked. *Needs:* one rate-limited fetch service, cached,
 shared — not per-agent HTTP.
 
-**G-05 · CUSIP is licensed intellectual property.** Redistributing CUSIPs
+**G-05 [OPEN] · CUSIP is licensed intellectual property.** Redistributing CUSIPs
 through a new internal system may exceed the firm's existing license. *Path:*
 key on FIGI (open) and CIK internally; surface CUSIP only where Orion already
 carries it under the firm's license.
 
-**G-06 · Ticker is not an identifier.** Tickers are reused across issuers over
+**G-06 [RESOLVED] · Ticker is not an identifier.** Tickers are reused across issuers over
 time and collide across venues. Any cache keyed on ticker will eventually return
 a dead company's price. Key on FIGI, resolve ticker→FIGI at the edge.
 
-**G-07 · Money-as-`bigint`-minor-units breaks on quotes.** `DATA_MODEL.md`
+**G-07 [RESOLVED] · Money-as-`bigint`-minor-units breaks on quotes.** `DATA_MODEL.md`
 mandates `core.money_minor` (bigint, ISO-4217 minor units). Sub-$1 securities
 quote in $0.0001 increments (Rule 612), and the 2024 tick-size amendments add a
 half-cent increment for tick-constrained names — confirm the current compliance
@@ -260,65 +297,74 @@ $0.1234 bid. *Resolution:* prices use `numeric(18,6)` + currency code;
 `money_minor` stays for settled amounts. **This is a direct conflict with a
 repo-wide rule and needs an ADR, not a workaround.**
 
-**G-08 · T-1 quantity × real-time price is wrong, and looks right.** Orion
+**G-08 [RESOLVED] · T-1 quantity × real-time price is wrong, and looks right.** Orion
 positions are reconciled to the prior close. Any intraday trade makes the
 notional silently incorrect. *Resolution:* quantity carries `as_of` and its
 source tier; an answer combining a T-1 quantity with a live price is labeled as
 such or it escalates. *Needs:* does the firm have intraday positions from the
 clearing firm, or only Orion?
 
-**G-09 · Redtail holds no positions.** It is the CRM (households, contacts,
+**G-09 [OPEN] · Redtail holds no positions.** It is the CRM (households, contacts,
 notes, workflows). "Integrate with Orion and Redtail" means two different
 integrations against two different data models — even though Orion has owned
 Redtail since 2022. Position questions route to Orion; relationship and
 suitability context routes to Redtail.
 
-**G-10 · Corporate actions silently invalidate history.** A split makes every
+**G-10 [OPEN] · Corporate actions silently invalidate history.** A split makes every
 cached prior close wrong. Adjusted vs unadjusted must be an explicit column, not
 a convention. *Needs:* a corporate-actions source (the clearing firm usually has
 one).
 
-**G-11 · The Q&A chatbot is a Reg BI surface, not a feature.** Any output an
-advisor forwards becomes a retail communication (2210); any output that reads as
-a recommendation triggers Reg BI. Mitigations: `data_scope: []` on the answer
-agent, hardcoded recommendation-vocabulary BLOCK, a citation on every claim, and
-17a-4 retention of the raw turn.
+**G-11 [SCOPED OUT] · Reg BI and 2210 belong to the compliance suite, not this
+sprint.** Sponsor decision: this is internal viewing and internal chat, not a
+customer-facing surface. What is built now is the *seam*, so the suite attaches
+later without a migration: `ops.advisor_interaction` is the join key every flag
+will hang on, its `channel` CHECK admits only `internal_chat`, `wsp.rule` ships
+empty with `is_active` false, `supervision_orchestrator` holds the sole write on
+`ops.flag`, and `BLK-005` blocks a request to format output for a client.
+*Residual, stated plainly:* nothing here evaluates whether an answer is a
+recommendation. That is deferred, not solved.
 
-**G-12 · "Agent for errors" is two different agents.** (a) `failure_triage_agent`
+**G-12 [CONFIRMED] · "Agent for errors" is two different agents.** (a) `failure_triage_agent`
 — classify a failed *run* (ops); (b) a `quote_integrity_agent` — detect bad
 *data* (crossed bid/ask, stale timestamp, price outside LULD bands). This plan
 builds (a) and folds (b) into `quote_snapshot_agent` as deterministic hardcoded
 rules. *Needs:* confirmation that this is the intended split.
 
-**G-13 · Compaction at 50% conflicts with books-and-records.** Compaction is
+**G-13 [RESOLVED] · Compaction at 50% conflicts with books-and-records.** Compaction is
 lossy by design; SEA 17a-4 retention applies to the communication, not to a
 summary of it. *Resolution:* persist the raw turn to the retention store
 **before** compaction. Token economics operate on the working context; the
 record of the communication is not the working context.
 
-**G-14 · Model routing has two sources of truth.** `AGENT_REGISTRY.yaml` has no
+**G-14 [RESOLVED] · Model routing has two sources of truth.** `AGENT_REGISTRY.yaml` has no
 `model` field; `scripts/cost_model.py` hardcodes an `AGENTS` routing table. They
 will drift, and the ROI slide will describe a system that does not exist.
 *Resolution:* add `model_tier` to the registry, have `cost_model.py` read it, and
 add a contract test that every agent declares one.
 
-**G-15 · Golden cases cannot assert live prices.** A market-data eval that hits a
+**G-15 [RESOLVED] · Golden cases cannot assert live prices.** A market-data eval that hits a
 live feed is non-deterministic and will fail at 09:30 for reasons unrelated to
 the code. *Resolution:* frozen fixtures — recorded quote payloads with fixed
 timestamps — and separate, non-gating connectivity smoke checks.
 
-**G-16 · "OSS" is ambiguous.** Read here as open/public sources (SEC, Federal
+**G-16 [RESOLVED] · "OSS" is ambiguous.** Read here as open/public sources (SEC, Federal
 Reserve/FRED, BLS, exchange notices). If it meant licensed newswires, source
 licensing and redistribution rights become a blocking prerequisite, not a
 detail.
 
-**G-17 · The third sub-agent in the request is garbled.** "agent grep Macro News,
-Agent," reads as two entries. *Assumption taken:* the missing agent is an SEC
-filings agent (`filing_fact_agent`), since EDGAR is named as the primary source.
-If it was meant to be a position/quantity agent, that changes the Orion
-integration from context to critical path.
+**G-17 [RESOLVED] · Macro news is a web-search agent, not a licensed feed.**
+`macro_news_scan_agent` queries reputable public sources against the
+`news.source` allowlist and returns *candidate* links with a stated basis —
+`geography_named` catches the case where an earthquake in Colombia bears on a
+miner operating there. It never states a price impact. Relevancy scoring and
+reranking are explicitly out of scope; `news.candidate_link.asserted` is pinned
+false by CHECK so nothing in this prototype can promote a candidate to a cause.
+*Residual:* without ranking, a 24-hour window on a large-cap returns dozens of
+links and the advisor does the filtering. That is honest, and it is the argument
+for the reranking agent later.
 
-**G-18 · `gate_agent` has no market-data rules yet.** `gating.yaml` is written
+**G-18 [RESOLVED] · `gate_agent` has no market-data rules yet.** `gating.yaml` is written
 for a sales domain. Without `BLK-005`/`BLK-006` and a securities clause on
 `BLK-003`, the gate will PROCEED on "should my client buy NVDA before earnings."
 
