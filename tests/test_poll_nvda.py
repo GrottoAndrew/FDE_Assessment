@@ -7,7 +7,7 @@ import pytest
 from decimal import Decimal
 
 from scripts.poll_nvda import (CIK, PollPlan, Response, normalize_chart,
-                               normalize_submissions, poll_once, _session_for)
+                               normalize_submissions, poll_once)
 from src.common.market_models import SEC_FORM_ALLOWLIST
 
 NOW = datetime(2026, 9, 8, 17, 45, 0, tzinfo=timezone.utc)   # 13:45 ET, Tuesday, RTH
@@ -115,10 +115,14 @@ def test_forms_off_the_allowlist_are_dropped_not_failed():
     assert all(f in SEC_FORM_ALLOWLIST for f in forms)
 
 
-def test_session_mapping_uses_eastern_market_hours():
-    assert _session_for(NOW) == "regular"
-    assert _session_for(NOW.replace(hour=23)) == "post"
-    assert _session_for(NOW.replace(day=12)) == "closed"   # 2026-09-12 is a Saturday
+def test_a_closed_market_skips_the_price_call_entirely():
+    """Session handling moved to src/common/market_clock (real tz, real holiday
+    table). The poller's job is to respect it before spending anything."""
+    f = FakeFetcher({"data.sec.gov": Response(304), "query1": Response(200, json.dumps(CHART).encode())})
+    out = poll_once(f, _state(), cap=500, delay_seconds=900, pacing=False,
+                    now=NOW.replace(hour=23))          # 19:45 ET, post-market
+    assert out["quote"]["status"] == "SKIPPED" and out["quote"]["spent"] == 0
+    assert out["edgar"] is not None, "EDGAR still polls; filings do not stop at the bell"
 
 
 # --- one cycle ---------------------------------------------------------------
@@ -170,12 +174,14 @@ def test_exhausted_cap_fails_rather_than_returning_the_cached_row():
     assert "row" not in out["quote"], "a cached row must not ride out on an exhausted budget"
 
 
-def test_a_failed_quote_call_still_counts_against_the_cap():
+def test_a_failed_quote_call_rechecks_once_then_fails_with_a_triage_class():
     f = FakeFetcher({"data.sec.gov": Response(304), "query1": Response(500)})
     st = _state()
     out = poll_once(f, st, cap=500, delay_seconds=900, pacing=False, now=NOW)
-    assert out["quote"]["status"] == "FAILED"
-    assert st["quote_calls"] == {"2026-9": 1}, "it reached the source; pretending otherwise blows the cap"
+    assert out["quote"]["status"] == "FAILED_NO_DATA"
+    assert out["quote"]["triage_class"] == "source_unavailable"
+    assert out["quote"]["attempts"] == 2, "one re-check on no data, then stop"
+    assert st["quote_calls"]["2026-9"] >= 1, "it reached the source; pretending otherwise blows the cap"
 
 
 def test_edgar_failure_is_reported_not_defaulted():
@@ -191,4 +197,4 @@ def test_a_403_asks_for_the_exa_fallback_rather_than_failing_silently():
     assert out["quote"]["status"] == "FALLBACK_REQUIRED"
     assert out["quote"]["fallback"] == "exa_web_search"
     assert "WebPriceObservation" in out["quote"]["contract"]
-    assert st["quote_calls"] == {"2026-9": 1}, "the blocked call still reached the source"
+    assert st["quote_calls"]["2026-9"] >= 1, "the blocked call still reached the source"

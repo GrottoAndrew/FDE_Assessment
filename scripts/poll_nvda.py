@@ -56,6 +56,8 @@ sys.path.insert(0, str(ROOT))
 from src.common.market_models import (PRICE_SOURCE, PRICE_SOURCE_DELAY_SECONDS,  # noqa: E402
                                       PRICE_SOURCE_PARAMS, PRICE_SOURCE_UNAVAILABLE,
                                       SEC_FORM_ALLOWLIST, FilingRow, QuoteSnapshot)
+from src.common.market_clock import reading as clock_reading  # noqa: E402
+from src.common.pull_guard import Outcome, guarded_pull  # noqa: E402
 from src.common.quote_budget import CachedQuote, Decision, QuoteBudget  # noqa: E402
 
 CIK = "0001045810"          # NVIDIA Corp
@@ -285,7 +287,8 @@ def budget_to_state(b: QuoteBudget, state: dict) -> None:
 # One cycle
 # ---------------------------------------------------------------------------
 def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
-              now: datetime | None = None, record: bool = False) -> dict:
+              now: datetime | None = None, record: bool = False,
+              verify: bool = False, transport=None) -> dict:
     now = now or datetime.now(timezone.utc)
     out = {"ts": now.isoformat().replace("+00:00", "Z"), "edgar": None, "quote": None}
 
@@ -313,70 +316,69 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
         # Never a default. A failed call is FAILED, and the caller writes ops.failure_log.
         out["edgar"] = {"status": "FAILED", "http_status": r.status}
 
-    # --- PRICE: budget first, fetch second. ---------------------------------
+    # --- PRICE: clock, then budget, then the guarded pull. -------------------
+    # The clock runs before the budget because a call outside the regular session
+    # cannot produce a current quote at any price.
+    ck = clock_reading(now)
+    if not ck.may_fetch_current_quote:
+        out["quote"] = {"status": "SKIPPED", "reason": ck.reason,
+                        "session": ck.session.value, "spent": 0,
+                        "et": ck.now_et.isoformat()}
+        return out
+
     b = budget_from_state(state, cap, pacing)
-    session = _session_for(now)
-    decision = b.decide(FIGI, session, now=now.timestamp())
+    decision = b.decide(FIGI, ck.session.value, now=now.timestamp())
     if decision is Decision.SERVE_CACHE:
         out["quote"] = {"status": "cache", "spent": 0}
     elif decision is Decision.BUDGET_EXHAUSTED:
         out["quote"] = {"status": "FAILED", "reason": "budget_exhausted",
                         "calls_used": b.calls_used(now.timestamp()), "cap": cap}
     else:
-        r = fetcher.get(f"{CHART_URL}?{CHART_PARAMS}", {"Accept": "application/json"})
-        if r.status == 200:
-            try:
-                row = normalize_chart(json.loads(r.body), delay_seconds, now)
-            except ValueError as e:
-                b.record_spent_call(now=now.timestamp())      # it reached the source; it counts
-                budget_to_state(b, state)
-                out["quote"] = {"status": "FAILED", "reason": str(e)}
-                return out
-            payload = row.model_dump(mode="json")
-            b.record_fetch(CachedQuote(figi=FIGI, payload=payload,
-                                       as_of_epoch=now.timestamp() - delay_seconds,
-                                       retrieved_epoch=now.timestamp(), source="yahoo",
-                                       delay_seconds=delay_seconds, session=session),
-                           now=now.timestamp())
-            out["quote"] = {"status": "ok", "spent": 1, "row": payload,
+        blocked: dict = {}
+
+        def _fetch():
+            r = fetcher.get(f"{CHART_URL}?{CHART_PARAMS}", {"Accept": "application/json"})
+            if r.status == 200:
+                return normalize_chart(json.loads(r.body), delay_seconds, now)
+            if r.status in (403, 429):
+                blocked["status"] = r.status
+            raise ValueError(f"HTTP {r.status}")
+
+        res = guarded_pull(_fetch, FIGI, TICKER, now=now, clock=ck,
+                           verify=verify, transport=transport)
+        for _ in range(res.calls_spent):
+            b.record_spent_call(now=now.timestamp())
+
+        if res.outcome is Outcome.OK and res.quote is not None:
+            payload = res.quote.model_dump(mode="json")
+            payload["halt_verified"] = res.halt_verified
+            b._cache[FIGI] = CachedQuote(figi=FIGI, payload=payload,
+                                         as_of_epoch=res.quote.as_of_at_utc.timestamp(),
+                                         retrieved_epoch=now.timestamp(), source=PRICE_SOURCE,
+                                         delay_seconds=delay_seconds, session=ck.session.value)
+            out["quote"] = {"status": "ok", "spent": res.calls_spent, "row": payload,
+                            "halt_verified": res.halt_verified,
                             "remaining": b.remaining(now.timestamp())}
             if record:
                 _freeze("quote", payload, now)
-        elif r.status in (403, 429):
+        elif blocked:
             # Blocked or throttled by the source. The fallback is NOT a library
             # call: Exa is an agent tool, so the poller emits the exact query and
             # the orchestrator runs it. Whatever comes back is a
             # WebPriceObservation, never a QuoteSnapshot — see ADR-0010.
-            b.record_spent_call(now=now.timestamp())
             out["quote"] = {
-                "status": "FALLBACK_REQUIRED",
-                "http_status": r.status,
-                "fallback": "exa_web_search",
+                "status": "FALLBACK_REQUIRED", "http_status": blocked["status"],
+                "fallback": "exa_web_search", "spent": res.calls_spent,
                 "query": f"{TICKER} stock quote page showing current price, previous close, bid and ask",
                 "contract": "returns WebPriceObservation (source_tier 6, writes_to_quote_table false); "
                             "candidates disagreeing by more than 0.50% return INDETERMINATE",
             }
         else:
-            b.record_spent_call(now=now.timestamp())
-            out["quote"] = {"status": "FAILED", "http_status": r.status}
+            out["quote"] = {"status": res.outcome.value, "reason": res.reason,
+                            "triage_class": res.triage_class, "spent": res.calls_spent,
+                            "attempts": res.attempts, "evidence": res.evidence}
     budget_to_state(b, state)
     return out
-
-
-def _session_for(now: datetime) -> str:
-    """UTC -> ET without a tz database dependency: ET is UTC-4 in DST, UTC-5 otherwise.
-    Wrong by an hour for three weeks a year, which shortens a TTL rather than
-    lengthening one. Replace with zoneinfo before this touches real money."""
-    et_min = ((now.hour - 4) % 24) * 60 + now.minute
-    if now.weekday() >= 5:
-        return "closed"
-    if RTH_OPEN_MIN <= et_min < RTH_CLOSE_MIN:
-        return "regular"
-    if 4 * 60 <= et_min < RTH_OPEN_MIN:
-        return "pre"
-    if RTH_CLOSE_MIN <= et_min < 20 * 60:
-        return "post"
-    return "closed"
 
 
 def _freeze(kind: str, data, now: datetime) -> None:
