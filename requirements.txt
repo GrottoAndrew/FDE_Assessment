@@ -1,0 +1,7 @@
+# RED TEAM RT-12. `make setup` installed pytest, pyyaml and jsonschema — and NOT
+# pydantic, which every module under src/common/ imports. A clean checkout ran
+# `make setup && make test` and died on ImportError before the first assertion.
+# jsonschema was installed and imported nowhere.
+pydantic==2.13.5
+PyYAML==6.0.3
+pytest==9.1.1

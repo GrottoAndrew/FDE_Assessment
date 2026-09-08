@@ -5,13 +5,17 @@ A problem-agnostic framework for building a constrained multi-agent system in a
 pieces are marked as illustrative and are meant to be deleted on sprint day; the
 structure, guardrails, and evaluation harness survive any problem statement.
 
-> **Fill this in at T-10:**
->
 > ## The problem
-> _<one sentence>_
+> An advisor asks for a US equity's current quote, the disclosure or macro event
+> behind a move, and what that implies for a position they already hold — and the
+> firm needs every answer cited, supervised, and cheap enough to run at desk volume.
 >
 > ## Not building
-> _1. … 2. … 3. …_
+> _1. Order entry, or anything that touches a trade. 2. Non-US securities, ADRs,
+> options, fixed income. 3. Writes back into Orion or Redtail. 4. Reg BI / FINRA
+> 2210 evaluation — the seam is built, the suite is deferred._
+>
+> Full plan: [`docs/build_plans/BUILD_PLAN_BD_MARKET_DATA.md`](docs/build_plans/BUILD_PLAN_BD_MARKET_DATA.md)
 
 ---
 
@@ -44,8 +48,11 @@ scope, an untestable output, and a failure you cannot localize. Enforced by
 `tests/test_contracts.py::test_every_agent_has_exactly_one_task` and
 `::test_no_vague_agent_names`. → [ADR-0002](docs/adr/0002-narrow-subagents-over-role-agents.md)
 
-### 2. Orchestrators are siloed
-One orchestrator per business domain, and it acts only within it. Out-of-domain
+### 2. Orchestrators are siloed, and hierarchical
+One orchestrator per business domain, and it acts only within it. A parent may
+call a **declared** child synchronously — an advisor turn cannot wait on a queue
+drain — but children never call parents and siblings never call each other,
+enforced by `test_orchestrator_call_graph_is_a_tree`. → [ADR-0006](docs/adr/0006-parent-child-orchestration-and-a-supervision-silo.md) Out-of-domain
 work is written to `ops.handoff_queue` for a sibling orchestrator and dropped —
 not summarized, not acted on. A sales orchestrator that notices a marketing
 problem records it and moves on.
@@ -61,7 +68,9 @@ write scope and no send tool — it *cannot* send.
 `core.entity` + `core.entity_xref` give every source system's id one resolution
 target, so "which system is right?" is a query rather than an argument. Every
 enumerable field FKs into `iso.*` — 3166 countries, 4217 currencies with
-`minor_unit`, 639 languages, 8601 timestamps enforced by column type. Agents
+`minor_unit`, 639 languages, 8601 timestamps enforced by column type. Money is
+one type end to end — `core.money` = `numeric(20,6)` + an ISO-4217 code, chosen so
+a Rule 612 sub-penny quote survives the round trip ([ADR-0007](docs/adr/0007-one-money-type-numeric-20-6.md)). Agents
 read `core.v_entity_resolved`, which excludes merged duplicates by construction.
 → [ADR-0003](docs/adr/0003-canonical-entity-layer-and-iso-codes.md)
 
@@ -114,12 +123,15 @@ Delete the sales examples on sprint day. Keep these:
 | `red_team_agent` | falsify another agent's claim | defaults to UNSUPPORTED; zero citations is UNSUPPORTED however plausible |
 | `discrepancy_agent` | find where two systems disagree | reports the divergence, never silently picks a winner |
 | `heuristic_override_agent` | apply the unwritten rules, last | every fire writes `rule_id` + before/after to `ops.audit_log` |
+| `failure_triage_agent` | classify one failed run | retry exhaustion becomes an actionable row, not an empty answer |
 
 ## Evaluation
 
-26 golden cases across four tiers, scoring the guardrails as heavily as the
+39 golden cases across four tiers, scoring the guardrails as heavily as the
 happy path — gate persistence under user pressure, heuristic boundary
 conditions, scope enforcement, fail-loud behavior, and citation sufficiency.
+Market-data cases run on frozen fixtures: a case that hits a live feed fails at
+09:30 for reasons unrelated to the code.
 
 Drift is computed **per case**, not on the aggregate: a run that holds at 23/26
 while swapping which three fail is reported as a regression, because it is one.

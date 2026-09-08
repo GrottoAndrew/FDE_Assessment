@@ -4,16 +4,16 @@
 # RULE: an agent that is not in this file does not exist. No ad-hoc spawning.
 #
 # Every agent declares (a) exactly one task, (b) the smallest set of tables it
-# can possibly need, (c) the deterministic rules it obeys instead of improvising,
-# and (d) the conditions under which it must stop and escalate to a human.
+# can possibly need, (c) the model it runs on, (d) the deterministic rules it
+# obeys instead of improvising, and (e) the conditions under which it must stop
+# and escalate to a human.
 #
-# The sales silo below is a WORKED EXAMPLE of the decomposition style, not the
-# assignment. On sprint day: keep the four SYSTEM agents verbatim, delete the
-# domain agents, and re-derive domain agents from the problem statement.
+# Domain: advisor quote-and-disclosure desk for a US independent broker-dealer.
+# See docs/build_plans/BUILD_PLAN_BD_MARKET_DATA.md.
 # ==============================================================================
 
 meta:
-  schema_version: 1
+  schema_version: 2
   decomposition_rule: >
     An agent's task must be stateable in one line with one verb and one object.
     If describing it needs "and" or "or", it is two agents. If it needs an
@@ -24,86 +24,94 @@ meta:
     max_output_tokens: 2000
   write_default: deny         # agents read; the orchestrator commits
 
+  # --- Model routing (ADR-0009) ----------------------------------------------
+  # tier_0  no model at all — deterministic code. The cheapest model is no model.
+  # sonnet  every pull from a third-party source or an internal DB. The default.
+  # opus    arbitration and falsification only: choosing between sources that
+  #         disagree, or trying to break a claim. Nothing else earns it.
+  model_tiers:
+    none:             "deterministic code path; an LLM here is pure loss"
+    claude-sonnet-5:  "default for all source pulls and internal DB queries"
+    claude-opus-5:    "adversarial judgment or multi-source arbitration only"
+
 # ------------------------------------------------------------------------------
-# ORCHESTRATORS — one per business domain. Strictly siloed.
+# ORCHESTRATORS — hierarchical. A parent may call a DECLARED child synchronously;
+# children never call parents, siblings never call each other (ADR-0006).
+# Enforced by tests/test_contracts.py::test_orchestrator_call_graph_is_a_tree.
 # ------------------------------------------------------------------------------
 orchestrators:
-  - name: sales_orchestrator
-    domain: sales
-    single_task: "Route sales-domain work to sales sub-agents and commit their results."
+  - name: advisor_desk_orchestrator
+    domain: advisor_desk
+    single_task: "Route one advisor request to the desk's sub-agents, then commit the cited result."
     owns_write: true
-    data_scope: [core.entity, core.account, sales.opportunity, sales.activity, ops.audit_log]
+    model: claude-opus-5
+    parent: null                     # root
+    calls:
+      - gate_agent
+      - quote_snapshot_agent
+      - orion_position_agent
+      - research_orchestrator
+      - advisor_answer_agent
+      - discrepancy_agent
+      - red_team_agent
+      - heuristic_override_agent
+    data_scope: [core.v_entity_resolved, md.security, md.v_quote_latest, pos.position_snapshot, ops.audit_log, ops.advisor_interaction]
+    hardcoded_rules:
+      - "intent='current' routes to quote_snapshot_agent; intent='prior_close' routes to orion_position_agent. The sponsor's rule, not a model judgment."
+      - "A notional combining a pos.position_snapshot quantity with a live quote is labeled with both as_of values or it is not returned."
+      - "Every committed answer writes one ops.advisor_interaction row before composition, so a flag has a join key later."
     cross_domain_policy: >
-      Never acts outside `domain`. Anything marketing-shaped is written to
-      ops.handoff_queue with target_domain='marketing' and dropped. It does not
-      reason about it, summarize it, or act on it. The marketing orchestrator
-      drains that queue on its own schedule.
+      Calls research_orchestrator synchronously because an advisor turn cannot
+      wait on a queue drain. Anything supervision-shaped — a suitability
+      question, a forward-to-client request — is written to ops.handoff_queue
+      with target_domain='supervision' and dropped. It does not reason about it,
+      summarize it, or act on it.
     escalate_when:
-      - "two sub-agents return contradictory facts about the same entity_id"
+      - "two sub-agents return contradictory facts about the same figi"
       - "a gate in src/policies/gating.yaml returns BLOCK"
-      - "confidence < 0.6 on any output that triggers an external side effect"
+      - "the quote source call budget is exhausted for the period"
 
-  - name: marketing_orchestrator
-    domain: marketing
-    single_task: "Drain ops.handoff_queue for target_domain='marketing' and route to marketing sub-agents."
+  - name: research_orchestrator
+    domain: research
+    single_task: "Route one disclosure question to the research sub-agents."
+    owns_write: false                # the desk commits; research only returns rows
+    model: claude-sonnet-5
+    parent: advisor_desk_orchestrator
+    calls: [filing_fact_agent, macro_news_scan_agent]
+    data_scope: [edgar.filing, edgar.xbrl_fact, news.headline, news.candidate_link, ops.audit_log]
+    cross_domain_policy: >
+      Returns rows to its parent and nothing else. It never calls the desk's
+      market-data agents; a research answer that needs a price is returned
+      without one, and the desk joins it.
+    escalate_when:
+      - "no filing covers the requested period"
+      - "two filings disclose conflicting values for the same tag"
+
+  - name: supervision_orchestrator
+    domain: supervision
+    single_task: "Drain ops.handoff_queue for target_domain='supervision'."
     owns_write: true
-    data_scope: [core.entity, marketing.campaign, marketing.touch, ops.handoff_queue, ops.audit_log]
-    status: stub   # scaffolded to prove the silo pattern; not built in sprint
+    model: claude-sonnet-5
+    parent: null
+    calls: [wsp_flag_agent]
+    data_scope: [wsp.rule, ops.handoff_queue, ops.advisor_interaction, ops.audit_log]
+    status: stub   # SCOPE CUT: Reg BI / FINRA 2210 logic deferred (sponsor, 2026-09-08).
+    note: >
+      Scaffolded, not built. It exists in the registry so ops.flag has exactly
+      one writer and the desk cannot clear a flag on its own output. The seam is
+      structural now; the rules land with the compliance suite later.
 
 # ------------------------------------------------------------------------------
-# SYSTEM AGENTS — domain-independent. KEEP THESE regardless of the problem set.
+# SYSTEM AGENTS — domain-independent. These survive any domain swap.
 # ------------------------------------------------------------------------------
 agents:
-  - name: red_team_agent
-    single_task: "Return a falsification verdict on another agent's output."
-    orchestrator: "*"
-    kind: system
-    inputs: {agent_name: str, claim: str, cited_rows: list}
-    outputs: {verdict: "SUPPORTED|UNSUPPORTED|UNVERIFIABLE", failing_case: str, cite: str}
-    data_scope: [core.*]       # read-only; must re-derive from source, not trust the claim
-    write_scope: []
-    hardcoded_rules:
-      - "Default to UNSUPPORTED when evidence is absent. Absence is not support."
-      - "A claim citing zero rows is UNSUPPORTED regardless of plausibility."
-      - "Never repair the claim. Judge only."
-    escalate_when: ["verdict is UNVERIFIABLE twice for the same claim"]
-    eval_tier: core
-
-  - name: discrepancy_agent
-    single_task: "Locate the source table where two systems disagree about one field."
-    orchestrator: "*"
-    kind: system
-    inputs: {entity_id: str, field: str}
-    outputs: {sources: list, values: list, divergence_point: str, confidence: float}
-    data_scope: [core.entity, core.entity_xref, ops.ingest_log]
-    write_scope: []
-    hardcoded_rules:
-      - "Compare against core.entity as canonical; report deltas, never silently pick a winner."
-      - "If timestamps are not ISO-8601 UTC, normalize before comparing or return INDETERMINATE."
-    escalate_when: ["divergence_point cannot be isolated to a single source"]
-    eval_tier: core
-
-  - name: heuristic_override_agent
-    single_task: "Apply the tribal-knowledge rules in policies/heuristics.yaml to a pending decision."
-    orchestrator: "*"
-    kind: system
-    runs: last            # executes AFTER all domain agents; its output supersedes theirs
-    inputs: {decision: dict, context: dict}
-    outputs: {final_decision: dict, rule_id: str, overridden: bool, rationale: str}
-    data_scope: [core.entity, core.account, ops.audit_log]
-    write_scope: [ops.audit_log]
-    hardcoded_rules:
-      - "Only fires on a rule_id that exists in heuristics.yaml. No improvised exceptions."
-      - "Every override writes rule_id + before/after to ops.audit_log. No silent overrides."
-      - "Two rules matching with opposite outcomes = INDETERMINATE -> human gate."
-    escalate_when: ["conflicting rules match", "rule matches but a precondition field is null"]
-    eval_tier: core
-
   - name: gate_agent
-    single_task: "Classify an input as PROCEED, ASK, or BLOCK before any work begins."
+    single_task: "Classify one request as PROCEED, ASK, or BLOCK before any work begins."
     orchestrator: "*"
     kind: system
     runs: first
+    model: claude-sonnet-5
+    pre_filter: deterministic     # enumerated BLOCK patterns match in code before any model call
     inputs: {request: str, context: dict}
     outputs: {decision: "PROCEED|ASK|BLOCK", clarifying_question: str, matched_rule: str}
     data_scope: []          # deliberately no data access — it decides, it does not look
@@ -112,91 +120,211 @@ agents:
       - "Ambiguity is not a reason to guess. Under-specified scope returns ASK with ONE question."
       - "Sensitive categories in gating.yaml return BLOCK regardless of how the request is phrased."
       - "ASK returns exactly one question, answerable in one line."
+    escalate_when: ["the request matches a BLOCK rule", "the request matches two ASK rules in different buckets"]
+    cost_profile: {tokens_in: 600, tokens_out: 80, share: 1.00}
+    eval_tier: core
+
+  - name: red_team_agent
+    single_task: "Return a falsification verdict on another agent's output."
+    orchestrator: "*"
+    kind: system
+    model: claude-opus-5
+    inputs: {agent_name: str, claim: str, cited_rows: list}
+    outputs: {verdict: "SUPPORTED|UNSUPPORTED|UNVERIFIABLE", failing_case: str, cite: str}
+    data_scope: [core.*, md.*, edgar.*]   # re-derives from source; must not trust the claim
+    write_scope: []
+    hardcoded_rules:
+      - "Default to UNSUPPORTED when evidence is absent. Absence is not support."
+      - "A claim citing zero rows is UNSUPPORTED regardless of plausibility."
+      - "Never repair the claim. Judge only."
+    escalate_when: ["verdict is UNVERIFIABLE twice for the same claim"]
+    cost_profile: {tokens_in: 3500, tokens_out: 400, share: 0.30}
+    eval_tier: core
+
+  - name: discrepancy_agent
+    single_task: "Locate the source where two systems disagree about one field."
+    orchestrator: "*"
+    kind: system
+    model: claude-opus-5
+    inputs: {entity_id: str, field: str}
+    outputs: {sources: list, values: list, divergence_point: str, confidence: float}
+    data_scope: [core.entity, core.entity_xref, md.quote_snapshot, pos.position_snapshot, ops.ingest_log]
+    write_scope: []
+    hardcoded_rules:
+      - "Report deltas against the source-precedence order in DATA_MODEL.md; never silently pick a winner."
+      - "If timestamps are not ISO-8601 UTC, normalize before comparing or return INDETERMINATE."
+      - "A quantity difference explained by differing as_of dates is a staleness report, not a discrepancy."
+    escalate_when: ["divergence_point cannot be isolated to a single source"]
+    cost_profile: {tokens_in: 3000, tokens_out: 500, share: 0.06}
+    eval_tier: core
+
+  - name: heuristic_override_agent
+    single_task: "Apply the tribal-knowledge rules in policies/heuristics.yaml to one pending decision."
+    orchestrator: "*"
+    kind: system
+    runs: last            # executes AFTER all domain agents; its output supersedes theirs
+    model: claude-opus-5
+    inputs: {decision: dict, context: dict}
+    outputs: {final_decision: dict, rule_id: str, overridden: bool, rationale: str}
+    data_scope: [core.entity, pos.position_snapshot, ops.audit_log]
+    write_scope: [ops.audit_log]
+    hardcoded_rules:
+      - "Only fires on a rule_id that exists in heuristics.yaml. No improvised exceptions."
+      - "Every override writes rule_id + before/after to ops.audit_log. No silent overrides."
+      - "Two rules matching with opposite outcomes = INDETERMINATE -> human gate."
+    escalate_when: ["conflicting rules match", "rule matches but a precondition field is null"]
+    cost_profile: {tokens_in: 1500, tokens_out: 300, share: 0.15}
+    eval_tier: core
+
+  - name: failure_triage_agent
+    single_task: "Classify one failed run into one remediation class."
+    orchestrator: "*"
+    kind: system
+    model: claude-sonnet-5
+    inputs: {run_id: str, agent_name: str, last_error: str, attempts: int}
+    outputs: {remediation_class: "source_unavailable|budget_exhausted|schema_drift|scope_denied|unclassified", cite: str}
+    data_scope: [ops.failure_log, ops.hitl_queue]
+    write_scope: [ops.hitl_queue]
+    hardcoded_rules:
+      - "A class not in the enum returns 'unclassified'. Inventing a class hides a new failure mode."
+      - "Triage never re-runs the failed work. Classifying is the whole job."
+      - "The same inputs_hash failing more than three times in one hour escalates as systemic."
+    escalate_when: ["remediation_class is unclassified", "the same inputs_hash failed more than three times in one hour"]
+    cost_profile: {tokens_in: 900, tokens_out: 150, share: 0.04}
     eval_tier: core
 
 # ------------------------------------------------------------------------------
-# DOMAIN AGENTS — ILLUSTRATIVE ONLY (sales silo). Replace on sprint day.
-# Shown to demonstrate the granularity bar: each is one job, one data scope.
+# DOMAIN AGENTS — advisor desk
 # ------------------------------------------------------------------------------
-  - name: appointment_setting_agent
-    single_task: "Propose three meeting slots for one contact."
-    orchestrator: sales_orchestrator
+  - name: quote_snapshot_agent
+    single_task: "Return one current quote snapshot for one symbol."
+    orchestrator: advisor_desk_orchestrator
     kind: domain
-    data_scope: [core.contact, sales.availability, sales.meeting]
-    write_scope: []            # proposes slots; sales_orchestrator commits the hold
-    hardcoded_rules:
-      - "Never propose a slot outside the contact's ISO-3166 region business hours."
-      - "Never double-book an owner_id already held in sales.meeting."
-    escalate_when: ["contact timezone is null or unmappable to ISO-3166"]
-    eval_tier: extended
-
-  - name: call_prep_agent
-    single_task: "Assemble a one-page brief for one scheduled call."
-    orchestrator: sales_orchestrator
-    kind: domain
-    data_scope: [core.account, sales.opportunity, sales.activity]
-    write_scope: []
-    hardcoded_rules: ["Cite the row id behind every fact in the brief. No uncited claims."]
-    eval_tier: extended
-
-  - name: order_tracking_agent
-    single_task: "Return current fulfillment status for one order id."
-    orchestrator: sales_orchestrator
-    kind: domain
-    data_scope: [sales.order, sales.shipment]
-    write_scope: []
-    hardcoded_rules: ["Status not in the ISO status enum returns INDETERMINATE, never a guess."]
-    eval_tier: core
-
-  - name: crm_monitor_agent
-    single_task: "Flag CRM records whose required fields went stale past threshold."
-    orchestrator: sales_orchestrator
-    kind: domain
-    data_scope: [core.entity, sales.opportunity]
-    write_scope: [ops.flag]
-    eval_tier: extended
-
-  - name: email_response_agent
-    single_task: "Draft one reply to one inbound sales email."
-    orchestrator: sales_orchestrator
-    kind: domain
-    data_scope: [core.contact, sales.activity]
-    write_scope: []           # drafts only; a human sends
-    hardcoded_rules:
-      - "Never state a price, date, or commitment not present in the cited rows."
-      - "Output is a draft. This agent has no send capability by construction."
-    eval_tier: core
-
-  - name: refund_eligibility_agent
-    single_task: "Decide refund eligibility for one order under the written policy."
-    orchestrator: sales_orchestrator
-    kind: domain
-    data_scope: [sales.order, sales.payment, core.account]
+    model: none                # deterministic fetch + arithmetic; an LLM here is pure loss
+    inputs: {figi: str}
+    outputs: {bid: str, ask: str, last: str, prev_close: str, spread_bps: str,
+              currency_code: str, source: str, as_of_at_utc: str, delay_seconds: int}
+    data_scope: [md.security, md.v_quote_latest, md.quote_call_budget]
     write_scope: []
     hardcoded_rules:
-      - "Apply only the written 30-day policy. Unwritten exceptions are NOT this agent's job."
-      - "Emit the raw eligibility; heuristic_override_agent applies tribal rules downstream."
+      - "Every price is returned with its ISO-4217 code, source, as_of_at_utc, delay_seconds. A bare number is a defect."
+      - "Prices serialize as JSON strings at numeric(20,6) scale; a JSON float loses the tail."
+      - "A crossed book (bid > ask) returns INDETERMINATE. Never compute a mid from a crossed quote."
+      - "A halted security returns INDETERMINATE with the halt flag, never a last price presented as current."
+      - "Symbols resolve through md.security by FIGI. A ticker is never a cache key."
+      - "Budget exhausted returns FAILED via src/common/quote_budget.py. A stale quote is never relabeled as current."
+      - "The interim source carries no quote book. A bid, ask, or spread request returns INDETERMINATE; a spread derived from OHLC is a fabricated number with a real timestamp."
+      - "No call is made outside the NYSE regular session, on the exchange clock. A price fetched at 03:00 ET is yesterday's close wearing a fresh timestamp."
+      - "A read returning no data is re-checked exactly once. Two empty reads are FAILED, never an empty quote."
+      - "Two reads differing by more than 0.50 percent return INDETERMINATE. Neither is served, neither is averaged."
+      - "A halted security returns INDETERMINATE, and the CCO is notified on the halt rather than on its resumption."
+      - "Halt status the source cannot report is unknown, never false. An unverified halt state is disclosed with the quote."
+    escalate_when:
+      - "the request asks for bid, ask, or spread while the source is the interim chart endpoint"
+      - "the NYSE calendar is unverified for the requested date"
+      - "two verification reads disagree beyond tolerance"
+      - "the symbol resolves to zero or more than one active security"
+      - "the freshest snapshot is older than the configured staleness ceiling"
+      - "the book is crossed or the security is halted"
+      - "the monthly source call budget is exhausted"
+    cost_profile: {tokens_in: 0, tokens_out: 0, share: 0.45}
     eval_tier: core
-    note: >
-      This is the seam the user's corporate-card example lives on. The written
-      rule and the unwritten rule are deliberately in two different components so
-      the unwritten one is auditable instead of buried in a prompt.
 
-  - name: funnel_cadence_agent
-    single_task: "Determine the next scheduled touch for one opportunity."
-    orchestrator: sales_orchestrator
+  - name: orion_position_agent
+    single_task: "Return one reconciled position for one account as of the prior close."
+    orchestrator: advisor_desk_orchestrator
     kind: domain
-    data_scope: [sales.opportunity, sales.activity, sales.cadence_rule]
-    write_scope: []            # proposes the touch; sales_orchestrator commits it
-    eval_tier: extended
-
-  - name: sales_analytics_agent
-    single_task: "Compute one named metric over one date range."
-    orchestrator: sales_orchestrator
-    kind: domain
-    data_scope: [sales.opportunity, sales.order, core.dim_date]
+    model: claude-sonnet-5
+    inputs: {orion_account_id: str, figi: str}
+    outputs: {quantity: str, close_price: str, cost_basis: str, currency_code: str, as_of_date: str, source: str}
+    data_scope: [pos.position_snapshot, md.security, core.v_entity_resolved]
     write_scope: []
     hardcoded_rules:
-      - "Metric must exist in docs/coding/DATA_MODEL.md. No inventing definitions."
-      - "Money returns with its ISO-4217 code. A bare number is a defect."
+      - "Quantity is returned with its as_of_date. A quantity without one is a defect."
+      - "This agent never returns an intraday value. Orion reconciles through the prior close, so that is what it can prove."
+      - "Money returns with its ISO-4217 code at numeric(20,6) scale."
+    escalate_when:
+      - "the account holds more than one lot with conflicting as_of_date values"
+      - "the requested as_of_date is later than the latest reconciliation"
+      - "the account reference resolves to zero or more than one account"
+    cost_profile: {tokens_in: 1100, tokens_out: 200, share: 0.25}
     eval_tier: core
+
+  - name: filing_fact_agent
+    single_task: "Return one XBRL-tagged fact for one CIK from one EDGAR filing."
+    orchestrator: research_orchestrator
+    kind: domain
+    model: claude-sonnet-5
+    inputs: {cik: str, tag: str, period_end: str}
+    outputs: {value: str, unit: str, accession_no: str, form_type: str, filed_at_utc: str}
+    data_scope: [edgar.filing, edgar.xbrl_fact]
+    write_scope: []
+    hardcoded_rules:
+      - "Every fact cites its accession_no. An uncited number is not a disclosure."
+      - "An untagged number read out of prose returns INDETERMINATE; extraction is not tagging."
+      - "EDGAR fetches go through one rate-limited shared client with the firm's declared User-Agent."
+    escalate_when:
+      - "no filing covers the requested period"
+      - "two filings disclose different values for the same tag over the same period"
+      - "the CIK resolves to zero or more than one issuer"
+    cost_profile: {tokens_in: 3800, tokens_out: 450, share: 0.18}
+    eval_tier: core
+
+  - name: macro_news_scan_agent
+    single_task: "Return published headlines that plausibly bear on one security."
+    orchestrator: research_orchestrator
+    kind: domain
+    model: claude-sonnet-5
+    inputs: {figi: str, window_hours: int}
+    outputs: {headlines: list, basis: list, retrieved_at_utc: str}
+    data_scope: [news.source, news.headline, news.candidate_link, md.security]
+    write_scope: []
+    hardcoded_rules:
+      - "Results come only from domains flagged is_allowed in news.source."
+      - "Every headline returns url, publisher, published_at_utc. An unattributed headline is dropped."
+      - "Output is a CANDIDATE link with a stated basis, never an asserted cause. news.candidate_link.asserted is pinned false by CHECK."
+      - "The agent never states or implies a price impact. Relevancy ranking is out of scope."
+    escalate_when:
+      - "zero allowed sources cover the requested window"
+      - "the security reference resolves to zero or more than one issuer"
+      - "a headline names the ticker but not the issuer, so the link basis is unverifiable"
+    cost_profile: {tokens_in: 2600, tokens_out: 500, share: 0.20}
+    eval_tier: core
+
+  - name: advisor_answer_agent
+    single_task: "Compose one cited answer from rows returned by other agents."
+    orchestrator: advisor_desk_orchestrator
+    kind: domain
+    model: claude-sonnet-5
+    inputs: {question: str, rows: list}
+    outputs: {answer: str, citations: list}
+    data_scope: []          # STRUCTURAL: it cannot fetch. Every fact must arrive cited.
+    write_scope: []         # STRUCTURAL: it cannot write, cannot send, cannot commit.
+    hardcoded_rules:
+      - "Every sentence containing a number carries the citation key of the row it came from."
+      - "A fact absent from the input rows returns INDETERMINATE. This agent has no data access by construction."
+      - "Prices are restated verbatim with source, as_of_at_utc, delay_seconds attached."
+      - "Never states a recommendation. This surface is internal-only by the ops.advisor_interaction channel CHECK."
+    escalate_when:
+      - "any input row lacks a citation key"
+      - "the question needs a fact no agent returned"
+      - "two input rows disagree, which is discrepancy_agent's call rather than a composition choice"
+    cost_profile: {tokens_in: 2200, tokens_out: 600, share: 1.00}
+    eval_tier: core
+
+  - name: wsp_flag_agent
+    single_task: "Flag one advisor interaction against one WSP rule id."
+    orchestrator: supervision_orchestrator
+    kind: domain
+    model: claude-sonnet-5
+    status: stub            # SCOPE CUT: compliance suite deferred (sponsor, 2026-09-08)
+    inputs: {interaction_id: int, wsp_rule_id: str}
+    outputs: {flagged: bool, wsp_rule_id: str, evidence: str}
+    data_scope: [wsp.rule, ops.advisor_interaction]
+    write_scope: [ops.flag, ops.hitl_queue]
+    hardcoded_rules:
+      - "Fires only on a wsp_rule_id present in wsp.rule with is_active true. The table ships empty, so nothing fires this sprint."
+      - "A flag is never cleared by the agent that raised it, nor by the desk."
+    escalate_when: ["the rule id is absent from wsp.rule", "the interaction text is truncated or unavailable"]
+    cost_profile: {tokens_in: 800, tokens_out: 120, share: 0.00}
+    eval_tier: extended
