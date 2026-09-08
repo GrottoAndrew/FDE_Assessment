@@ -72,31 +72,34 @@ Then apply the schema. Either through the MCP (`apply_migration`) or directly:
 
 </details>
 
-### On item 2 — create the key inside a workspace
+### On item 2 — the API key needs a workspace
 
-**This is a property of the organization, not of one key.** Tested 2026-09-08:
-a key issued at org level authenticates fine (a bad key returns 401; an
-org-scoped key returns **400**) but every request is rejected:
+Verified against https://platform.claude.com/docs/en/manage-claude/authentication
+(2026-09-08). **The console is `platform.claude.com`, NOT `console.anthropic.com`** —
+the old domain lands you in Claude web services.
 
-    This API key is not scoped to a workspace, so this request must include
-    the anthropic-workspace-id header with the ID of the workspace to use.
+Personal and service-account keys are identity-linked. If the key was not scoped
+to a workspace at creation, every request must carry `anthropic-workspace-id`, or
+the API returns 400.
 
-Confirmed against both `/v1/models` and `/v1/messages/count_tokens`, so it is not
-an endpoint quirk — nothing works. Whatever key you mint on sprint day will hit
-this unless you create it in the right place.
+**Fast fix — keep the current key:**
+Copy the ID from the **ID** column at https://platform.claude.com/settings/workspaces
+and set it in `.env`:
 
-**Do this:** Console → Settings → API keys → create the key **inside a
-workspace**. Paste into `.env`, leave `ANTHROPIC_WORKSPACE_ID` blank. No
-per-request header, nothing for the SDK to special-case.
+    ANTHROPIC_WORKSPACE_ID=wrkspc_01...
 
-**If you are stuck with an org key:** set `ANTHROPIC_WORKSPACE_ID=wrkspc_...` in
-`.env` (Console → Settings → Workspaces; the id is in the URL) and make every
-client send `anthropic-workspace-id` on every call. `scripts/preflight.py` reads
-the variable and sends the header, so it will verify this path too — but it is
-one more thing to get wrong in a hurry.
+`scripts/preflight.py` reads it and sends the header. Clients need it too:
 
-Either way: `make preflight` until the model check is green. It takes seconds and
-tells you which of the two cases you are in.
+    client = Anthropic(default_headers={"anthropic-workspace-id": "wrkspc_01..."})
+
+**Clean fix — scope the key instead:**
+https://platform.claude.com/settings/keys → **Create key** → set **Linked account**
+(yourself for personal) and **scope it to a workspace**. Then no header, anywhere.
+
+Note the Default Workspace is omitted from Settings → Workspaces; its id comes
+back in the `anthropic-workspace-id` response header of any request that runs there.
+
+Either way: `make preflight` until the model check is green.
 
 ## Tier 2 — verified live, useful if the problem happens to fit
 
