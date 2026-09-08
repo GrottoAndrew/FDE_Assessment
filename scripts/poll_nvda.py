@@ -53,6 +53,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from src.common.market_models import (PRICE_SOURCE, PRICE_SOURCE_DELAY_SECONDS,  # noqa: E402
+                                      PRICE_SOURCE_PARAMS, PRICE_SOURCE_UNAVAILABLE,
+                                      SEC_FORM_ALLOWLIST, FilingRow, QuoteSnapshot)
 from src.common.quote_budget import CachedQuote, Decision, QuoteBudget  # noqa: E402
 
 CIK = "0001045810"          # NVIDIA Corp
@@ -61,7 +64,7 @@ FIGI = "BBG000BBJQV0"       # NVDA common; resolve through md.security, never by
 
 EDGAR_URL = f"https://data.sec.gov/submissions/CIK{CIK}.json"
 CHART_URL = f"https://query1.finance.yahoo.com/v8/finance/chart/{TICKER}"
-CHART_PARAMS = "interval=1m&range=1d&includePrePost=false&events=div%2Csplit"
+CHART_PARAMS = PRICE_SOURCE_PARAMS   # HARDCODED in market_models (ADR-0010)
 
 STATE_PATH = ROOT / "eval_output" / ".poll_state.json"
 FIXTURE_DIR = ROOT / "eval_workflows" / "fixtures" / "nvda"
@@ -154,61 +157,84 @@ class UrllibFetcher:
 # ---------------------------------------------------------------------------
 # Normalization — into the shapes 004_domain.sql already holds.
 # ---------------------------------------------------------------------------
-def normalize_chart(payload: dict, delay_seconds: int, retrieved_at: datetime) -> dict:
-    """Yahoo chart -> md.quote_snapshot shape. Prices as strings; a JSON float
-    loses the tail, and the tail is where Rule 612 lives."""
+def normalize_chart(payload: dict, delay_seconds: int, retrieved_at: datetime) -> QuoteSnapshot:
+    """Yahoo chart -> a validated QuoteSnapshot.
+
+    Every failure here is an exception, and an exception is a FAILED run with a
+    row in ops.failure_log. Nothing half-parsed reaches a model.
+    """
     result = (payload.get("chart") or {}).get("result") or []
     if not result:
         raise ValueError("chart payload carries no result: treat as a failed call, not an empty quote")
     meta = result[0]["meta"]
 
     def money(v):
-        return None if v is None else str(Decimal(str(v)).quantize(Decimal("0.000001")))
+        return None if v is None else Decimal(str(v))
 
-    as_of = datetime.fromtimestamp(meta["regularMarketTime"], timezone.utc) if meta.get("regularMarketTime") else None
+    mt = meta.get("regularMarketTime")
+    if not mt:
+        raise ValueError("no regularMarketTime: a price without a venue timestamp is not a quote")
     state = (meta.get("marketState") or "").upper()
     session = {"REGULAR": "regular", "PRE": "pre", "POST": "post",
                "POSTPOST": "closed", "CLOSED": "closed", "PREPRE": "closed"}.get(state, "closed")
-    return {
-        "figi": FIGI, "ticker": meta.get("symbol", TICKER),
-        "bid": None, "ask": None, "bid_size": None, "ask_size": None,
-        "last": money(meta.get("regularMarketPrice")),
-        "prev_close": money(meta.get("chartPreviousClose") or meta.get("previousClose")),
-        "currency_code": meta.get("currency", "USD"),
-        "source": "yahoo_chart_v8",
-        "delay_seconds": delay_seconds,
-        "as_of_at_utc": as_of.isoformat().replace("+00:00", "Z") if as_of else None,
-        "retrieved_at_utc": retrieved_at.isoformat().replace("+00:00", "Z"),
-        "session": session,
-        "is_halted": None,          # this source does not report halt status
-        "price_basis": "adjusted",  # the chart layout requests split/dividend adjusted
-        "unavailable_fields": ["bid", "ask", "bid_size", "ask_size", "spread_bps", "mid", "is_halted"],
-    }
+    return QuoteSnapshot(
+        figi=FIGI, ticker=meta.get("symbol", TICKER),
+        last=money(meta.get("regularMarketPrice")),
+        prev_close=money(meta.get("chartPreviousClose") or meta.get("previousClose")),
+        currency_code=meta.get("currency", "USD"),
+        source=PRICE_SOURCE,
+        delay_seconds=delay_seconds,
+        as_of_at_utc=datetime.fromtimestamp(mt, timezone.utc),
+        retrieved_at_utc=retrieved_at,
+        session=session,
+        is_halted=None,             # this source does not report halt status
+        price_basis="adjusted",     # the chart layout requests split/dividend adjusted
+        unavailable_fields=PRICE_SOURCE_UNAVAILABLE,
+    )
 
 
-def normalize_submissions(payload: dict, since_accession: str | None) -> list[dict]:
-    """EDGAR submissions -> edgar.filing rows, newest first, stopping at the
-    last one already seen."""
+def normalize_submissions(payload: dict, since_accession: str | None) -> list[FilingRow]:
+    """EDGAR submissions -> validated FilingRows, newest first, stopping at the
+    last one already seen.
+
+    Forms outside SEC_FORM_ALLOWLIST are dropped silently and by design: the
+    client scoped this to ownership and insider activity because periodic reports
+    land outside trading hours (ADR-0011). Dropping is not the same as failing —
+    a 10-K is a correct thing to ignore, not an error.
+    """
     recent = ((payload.get("filings") or {}).get("recent")) or {}
-    cols = ("accessionNumber", "form", "filingDate", "reportDate", "primaryDocument", "acceptanceDateTime")
     if not recent.get("accessionNumber"):
         return []
-    rows = []
+    rows: list[FilingRow] = []
     for i in range(len(recent["accessionNumber"])):
         acc = recent["accessionNumber"][i]
         if since_accession and acc == since_accession:
             break
         get = lambda c: (recent.get(c) or [None] * (i + 1))[i]  # noqa: E731
-        rows.append({
-            "accession_no": acc,
-            "cik": CIK,
-            "form_type": get("form"),
-            "filed_at_utc": get("acceptanceDateTime") or get("filingDate"),
-            "period_of_report": get("reportDate") or None,
-            "primary_doc_url": f"https://www.sec.gov/Archives/edgar/data/{int(CIK)}/"
-                               f"{acc.replace('-', '')}/{get('primaryDocument')}",
-        })
+        form = get("form")
+        if form not in SEC_FORM_ALLOWLIST:
+            continue
+        filed = get("acceptanceDateTime") or get("filingDate")
+        rows.append(FilingRow(
+            accession_no=acc,
+            cik=CIK,
+            form_type=form,
+            filed_at_utc=_parse_edgar_ts(filed),
+            period_of_report=get("reportDate") or None,
+            primary_doc_url=f"https://www.sec.gov/Archives/edgar/data/{int(CIK)}/"
+                            f"{acc.replace('-', '')}/{get('primaryDocument')}",
+        ))
     return rows
+
+
+def _parse_edgar_ts(v: str) -> datetime:
+    """EDGAR gives either an acceptance datetime or a bare filing date. A bare
+    date is midnight UTC and is labeled as such rather than guessed into a time."""
+    if v.endswith("Z"):
+        return datetime.fromisoformat(v.replace("Z", "+00:00"))
+    if "T" in v:
+        return datetime.fromisoformat(v).replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(v + "T00:00:00").replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------
@@ -276,12 +302,13 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
         payload = json.loads(r.body)
         rows = normalize_submissions(payload, state.get("last_accession"))
         if rows:
-            state["last_accession"] = rows[0]["accession_no"]
+            state["last_accession"] = rows[0].accession_no
         state["edgar_etag"] = r.headers.get("ETag")
         state["edgar_last_modified"] = r.headers.get("Last-Modified")
-        out["edgar"] = {"status": "ok", "new_filings": len(rows), "filings": rows[:10]}
+        dumped = [r_.model_dump(mode="json") for r_ in rows]
+        out["edgar"] = {"status": "ok", "new_filings": len(rows), "filings": dumped[:10]}
         if record and rows:
-            _freeze("filings", rows, now)
+            _freeze("filings", dumped, now)
     else:
         # Never a default. A failed call is FAILED, and the caller writes ops.failure_log.
         out["edgar"] = {"status": "FAILED", "http_status": r.status}
@@ -305,15 +332,30 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
                 budget_to_state(b, state)
                 out["quote"] = {"status": "FAILED", "reason": str(e)}
                 return out
-            b.record_fetch(CachedQuote(figi=FIGI, payload=row,
+            payload = row.model_dump(mode="json")
+            b.record_fetch(CachedQuote(figi=FIGI, payload=payload,
                                        as_of_epoch=now.timestamp() - delay_seconds,
                                        retrieved_epoch=now.timestamp(), source="yahoo",
                                        delay_seconds=delay_seconds, session=session),
                            now=now.timestamp())
-            out["quote"] = {"status": "ok", "spent": 1, "row": row,
+            out["quote"] = {"status": "ok", "spent": 1, "row": payload,
                             "remaining": b.remaining(now.timestamp())}
             if record:
-                _freeze("quote", row, now)
+                _freeze("quote", payload, now)
+        elif r.status in (403, 429):
+            # Blocked or throttled by the source. The fallback is NOT a library
+            # call: Exa is an agent tool, so the poller emits the exact query and
+            # the orchestrator runs it. Whatever comes back is a
+            # WebPriceObservation, never a QuoteSnapshot — see ADR-0010.
+            b.record_spent_call(now=now.timestamp())
+            out["quote"] = {
+                "status": "FALLBACK_REQUIRED",
+                "http_status": r.status,
+                "fallback": "exa_web_search",
+                "query": f"{TICKER} stock quote page showing current price, previous close, bid and ask",
+                "contract": "returns WebPriceObservation (source_tier 6, writes_to_quote_table false); "
+                            "candidates disagreeing by more than 0.50% return INDETERMINATE",
+            }
         else:
             b.record_spent_call(now=now.timestamp())
             out["quote"] = {"status": "FAILED", "http_status": r.status}
