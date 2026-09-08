@@ -1,7 +1,10 @@
-.PHONY: help setup test tdd eval evalq golden schema seed lint deck preflight clean
+.PHONY: help setup test tdd eval evalq golden schema seed lint deck preflight cost clean
 
 help:
 	@grep -E '^[a-z-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+
+cost:    ## model routing cost model + ROI sensitivity
+	python3 scripts/cost_model.py --volume $(or $(VOL),5000)
 
 preflight: ## run the morning-of checks — do this BEFORE the sprint
 	.venv/bin/python scripts/preflight.py
