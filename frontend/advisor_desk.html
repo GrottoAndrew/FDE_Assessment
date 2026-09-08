@@ -60,18 +60,21 @@ a{color:var(--brand-700)}
 .symsw button{font:inherit;font-size:12px;padding:6px 11px;border:1px solid var(--brand-700);
   border-radius:6px;background:var(--brand-700);color:#fff;cursor:pointer}
 .symsw button:hover{background:var(--brand-900)}
-.symnote{font-size:10.5px;line-height:1.45;color:var(--muted);margin-top:6px;max-width:236px}
+.symnote{font-size:10px;line-height:1.4;color:var(--muted);margin-top:6px;max-width:236px}
 .subj{font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--surface-2);
   border-left:2px solid var(--brand-500);padding:5px 9px;border-radius:0 4px 4px 0;margin-bottom:9px}
 .subj-n{color:var(--muted);font-family:var(--sans);font-size:10.5px}
+.audit-tog{margin-left:auto;font-size:10.5px;color:var(--muted);display:flex;align-items:center;
+  gap:5px;cursor:pointer;user-select:none;white-space:nowrap}
+.audit-tog input{accent-color:var(--brand-700);margin:0}
 .filing-lnk{color:var(--brand-500);text-decoration:none;border-bottom:1px dotted var(--brand-300)}
 .filing-lnk:hover{color:var(--brand-700);border-bottom-style:solid}
 .figs{display:flex;gap:26px;flex-wrap:wrap;flex:1}
-.fig{min-width:96px}
+.fig{min-width:96px;max-width:196px}
 .fig .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
 .fig .v{font-family:var(--mono);font-size:21px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.25}
 .fig .v.na{color:var(--muted);font-size:16px}
-.fig .why{font-size:10.5px;color:var(--muted);max-width:180px;line-height:1.35}
+.fig .why{font-size:10px;color:var(--muted);max-width:196px;line-height:1.35;margin-top:3px;cursor:help}
 .dn{color:var(--crit)} .up{color:var(--ok)}
 .chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;align-items:center}
 .chip{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:3px;
@@ -173,16 +176,11 @@ footer b{color:var(--ink-2);font-weight:600}
         <div class="fig"><div class="k">Change</div><div class="v dn" id="q-chg">−4.32 (−1.88%)</div></div>
         <div class="fig">
           <div class="k">Bid / Ask</div><div class="v na" id="q-book">not available</div>
-          <div class="why"><b>Requires the entitled feed.</b> The interim chart endpoint returns
-            no quote book at all, so bid and ask are absent — not null-because-empty. They appear
-            only once the firm's entitled Level 1 feed is connected under its Reg NMS 603(c)
-            display agreement.</div>
+          <div class="why" title="The interim chart endpoint returns no quote book at all, so bid and ask are absent — not null-because-empty. They appear only once the firm's entitled Level 1 feed is connected under its Reg NMS 603(c) display agreement."><b>Blocked on the entitled feed.</b> This source has no quote book.</div>
         </div>
         <div class="fig">
           <div class="k">Spread</div><div class="v na">undefined</div>
-          <div class="why"><b>Requires the entitled feed.</b> Spread is a function of bid and ask;
-            with no book there is no mid and no spread. It is left undefined rather than derived
-            from OHLC, which would be a fabricated number carrying a real timestamp.</div>
+          <div class="why" title="Spread is a function of bid and ask; with no book there is no mid and no spread. Left undefined rather than derived from OHLC, which would be a fabricated number carrying a real timestamp."><b>Blocked on the entitled feed.</b> No book, so no mid. Never derived from OHLC.</div>
         </div>
       </div>
     </div>
@@ -195,16 +193,17 @@ footer b{color:var(--ink-2);font-weight:600}
     <section class="panel" aria-label="Ask the desk">
       <div class="phead">
         <h2>Ask the desk</h2>
-        <span class="note">Answers cite the row behind them, or they escalate.</span>
+        <span class="note">Answers cite their source, or they escalate.</span>
+        <label class="audit-tog"><input type="checkbox" id="audit"> audit trail</label>
       </div>
       <div class="log" id="log"></div>
-      <div class="ledger">
+      <div class="ledger" id="ledger-wrap" hidden>
         <div class="lg" id="ledger"></div>
       </div>
       <div class="seeds" id="seeds"></div>
       <form class="ask-form" id="form" autocomplete="off">
         <label for="q" style="position:absolute;left:-9999px">Your question</label>
-        <input type="text" id="q" placeholder="e.g. what is Nvidea trading at right now?">
+        <input type="text" id="q" placeholder="e.g. what is NVDA trading at right now?">
         <button type="submit">Ask</button>
       </form>
     </section>
@@ -235,11 +234,10 @@ footer b{color:var(--ink-2);font-weight:600}
           <li><a href="#" aria-disabled="true">Outside business activity<span class="tag">stub</span></a></li>
           <li><a href="#" aria-disabled="true">Gifts &amp; entertainment log<span class="tag">stub</span></a></li>
         </ul>
-        <div class="stub"><b>Stubbed pending client guidance.</b> The flag endpoints exist in the
-          schema; the rule logic is deliberately absent. <code>wsp.rule</code> ships empty with
-          <code>is_active=false</code>, so nothing fires. The firm's actual WSP text, its 3110
-          review thresholds and its escalation path are <b>client inputs</b>: a supervisory rule
-          invented by us is a compliance liability, not a feature.</div>
+        <div class="stub"><b>Stubbed pending client guidance.</b> The flag endpoints are built;
+          the rules behind them are deliberately empty, so nothing fires today. The firm's actual
+          WSP text, its 3110 review thresholds and its escalation path are <b>client inputs</b>:
+          a supervisory rule invented by us is a compliance liability, not a feature.</div>
       </div>
 
       <div class="panel">
@@ -265,7 +263,7 @@ footer b{color:var(--ink-2);font-weight:600}
     <div><b>Source</b> yahoo_chart_v8, 15-minute delayed</div>
     <div><b>Entitled feed</b> not connected — bid, ask and spread depend on it (sprint 2)</div>
     <div><b>Halt status</b> unverified by this source</div>
-    <div><b>Retention</b> every turn written to ops.advisor_interaction</div>
+    <div><b>Retention</b> every turn recorded for supervisory review</div>
   </div>
 </footer>
 
@@ -874,18 +872,15 @@ function renderRail(){
   document.getElementById("q-book").textContent = "not available";
 
   document.getElementById("q-chips").innerHTML = seeded ? `
-    <span class="chip ok">session regular \u00b7 NYSE</span>
-    <span class="chip warn">delayed 900s</span>
-    <span class="chip warn">halt unverified</span>
-    <span class="chip">basis adjusted</span>
+    <span class="chip ok">market open</span>
+    <span class="chip warn">delayed 15 min \u2014 not a tradeable price</span>
+    <span class="chip warn">halt status unverified</span>
     <span class="chip">as of ${ET(q.as_of_at_utc)}</span>
-    <span class="chip">verified by 2nd read \u00b7 \u0394 0.00%</span>
-    <span class="chip crit">no quote book \u2014 entitled feed required</span>` : `
-    <span class="chip ok">entity resolved \u00b7 CIK ${ACTIVE.cik}</span>
+    <span class="chip crit">no bid/ask \u2014 entitled feed required</span>` : `
+    <span class="chip ok">identified \u00b7 CIK ${ACTIVE.cik}</span>
     <span class="chip">${ACTIVE.sector}</span>
-    <span class="chip crit">no price slice seeded for ${ACTIVE.ticker}</span>
-    <span class="chip crit">no entitled feed connected</span>
-    <span class="chip">EDGAR link live</span>`;
+    <span class="chip crit">no price available for ${ACTIVE.ticker}</span>
+    <span class="chip crit">no market data feed connected</span>`;
 }
 
 /* --- Entity resolution --------------------------------------------------- */
@@ -928,6 +923,7 @@ function resolve(text){
    answers, so a request that must be blocked cannot fall through to a price. */
 function classify(t){
   const s = t.toLowerCase();
+  if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
@@ -960,7 +956,7 @@ function subject(){
 function provenance(extra){
   return `<div class="cite"><b>source</b> ${QUOTE.source} \u00b7 <b>delayed</b> ${QUOTE.delay_seconds}s \u00b7
     <b>as of</b> ${ET(QUOTE.as_of_at_utc)} \u00b7 <b>basis</b> ${QUOTE.price_basis} \u00b7
-    <b>halt</b> unverified<br><b>cite</b> ${QUOTE.cite}${extra ? "<br>" + extra : ""}</div>`;
+    <b>halt</b> unverified${extra ? "<br>" + extra : ""}</div>`;
 }
 
 /* Every data answer is written against the ACTIVE security, so it names the
@@ -977,8 +973,8 @@ function notSeeded(rules, what){
       desk could produce.</p>
     <p>What closes this gap is the entitled feed plus the client's security master. Neither is a
       code change here; both are procurement.</p>
-    <div class="cite"><b>resolved from</b> S&amp;P 500 index membership \u00b7 <b>identifier</b> CIK
-      (ADR-0012) \u00b7 <b>price</b> none \u2014 not fetched, not cached, not estimated</div>`};
+    <div class="cite"><b>resolved from</b> S&amp;P 500 index membership \u00b7
+      <b>price</b> none \u2014 not fetched, not cached, not estimated</div>`};
 }
 
 function answer(text){
@@ -989,7 +985,7 @@ function answer(text){
   // Gate first, before any data is touched.
   if (intent === "advice"){
     rules.push("BLK-003 legal_medical_financial_advice");
-    return {rules, html:`<span class="verdict v-block">BLOCK \u00b7 BLK-003</span>
+    return {rules, html:`<span class="verdict v-block">CANNOT ANSWER</span>
       <p>I return data, not recommendations. Suitability and Reg BI live with the compliance
       suite, which is not built in this prototype.</p>
       <p>What I can give you: the quote with its provenance, the reconciled position, and the
@@ -997,10 +993,10 @@ function answer(text){
   }
   if (intent === "clientfacing"){
     rules.push("BLK-005 client_facing_output");
-    return {rules, html:`<span class="verdict v-block">BLOCK \u00b7 BLK-005</span>
-      <p>This desk is internal only \u2014 enforced by a CHECK constraint on
-      <code>ops.advisor_interaction.channel</code>, not by a policy note. Anything formatted to
-      send a client is a supervised communication under Rule 2210 and needs principal review.</p>`};
+    return {rules, html:`<span class="verdict v-block">INTERNAL USE ONLY</span>
+      <p>This desk is internal only, and that is enforced by the system rather than by a policy
+      note \u2014 there is no path from here to a client. Anything formatted to send a client is a
+      supervised communication under Rule 2210 and needs principal review first.</p>`};
   }
 
   // A question that names a different security switches the active one, so the
@@ -1067,24 +1063,24 @@ function answer(text){
       return {rules, html:`${subject()}${disclosure}<span class="verdict v-ok">ANSWER</span>
         <p>${ACTIVE.ticker} prior close <b>${POSITION.close_price} USD</b>, from Orion's
         reconciliation dated ${POSITION.as_of_date} \u2014 not the vendor's prior close.</p>
-        <p>Heuristic HEU-001: for a held position the number has to match the client statement,
-        so Orion supersedes the feed. The override is written to <code>ops.audit_log</code>
-        with the before and after.</p>
-        <div class="cite"><b>source</b> orion \u00b7 <b>as of</b> ${POSITION.as_of_date} \u00b7
-        <b>cite</b> ${POSITION.cite}</div>`};
+        <p>For a held position the number has to match the client statement, so Orion supersedes
+        the vendor's close. The override is recorded with both values so a supervisor can see what
+        was substituted and why.</p>
+        <div class="cite"><b>source</b> Orion reconciliation \u00b7 <b>as of</b> ${POSITION.as_of_date} \u00b7
+        <b>account</b> ${POSITION.account}</div>`};
 
     case "position": {
       if (!seeded) return notSeeded(rules, "position");
       rules.push("ASK-207 stale_quantity_for_a_live_notional");
       const notional = POSITION.qty * micro(QUOTE.last);
-      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ind">ASK \u00b7 ASK-207</span>
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ind">ONE QUESTION FIRST</span>
         <p>${POSITION.household} holds <b>${POSITION.qty.toLocaleString("en-US")} shares</b> of
         ${ACTIVE.ticker}, reconciled through <b>${POSITION.as_of_date}</b>. Multiplying that by the
         delayed price gives <b>${fmtUSD(notional)}</b> \u2014 and that figure is wrong if anything
         traded in the account since.</p>
         <p>Use the T-1 quantity as of ${POSITION.as_of_date}, or wait for today's file?</p>
-        <div class="cite"><b>quantity</b> orion, as of ${POSITION.as_of_date} \u00b7
-        <b>price</b> ${QUOTE.source}, delayed 900s \u00b7 <b>cite</b> ${POSITION.cite}</div>`};
+        <div class="cite"><b>quantity</b> Orion, as of ${POSITION.as_of_date} \u00b7
+        <b>price</b> delayed 15 min \u00b7 <b>account</b> ${POSITION.account}</div>`};
     }
 
     case "filings":
@@ -1096,7 +1092,7 @@ function answer(text){
           EDGAR filing index for CIK ${ACTIVE.cik} \u2014 ${ACTIVE.name}</a></p>
         <p>Pointing you at the primary source is a correct answer. Summarising filings I have not
         retrieved would not be.</p>
-        <div class="cite"><b>source</b> sec.gov \u00b7 <b>identifier</b> CIK ${ACTIVE.cik}</div>`};
+        <div class="cite"><b>source</b> SEC EDGAR \u00b7 <b>issuer</b> CIK ${ACTIVE.cik}</div>`};
       return {rules, html:`${subject()}${disclosure}<span class="verdict v-ok">ANSWER</span>
         <p>Three ${ACTIVE.ticker} filings on the intraday-material allowlist \u2014 each accession
         links to the filing itself on EDGAR:</p>
@@ -1106,7 +1102,7 @@ function answer(text){
         <p>10-K and 10-Q are excluded by design: they land outside trading hours. Form 13H is on
         the allowlist but will never appear \u2014 large-trader filings are confidential under
         Exchange Act 13(h)(7).</p>
-        <div class="cite"><b>source</b> edgar.filing \u00b7 <b>issuer</b>
+        <div class="cite"><b>source</b> SEC EDGAR \u00b7 <b>issuer</b>
         <a class="filing-lnk" href="${edgarIssuer(QUOTE.cik)}" target="_blank" rel="noopener noreferrer">CIK ${QUOTE.cik}</a></div>`};
 
     case "news": {
@@ -1137,30 +1133,62 @@ function answer(text){
              <a class="filing-lnk" href="${edgarFiling(QUOTE.cik, FILINGS[0].acc)}" target="_blank" rel="noopener noreferrer">${FILINGS[0].acc}</a> \u2014
              which is <i>temporally adjacent and nothing more</i>. A Section 16 report of an
              insider transaction is not an explanation of a ${m.pctTxt} index-constituent move.</p>
-           <p>Macro and headline candidates are surfaced with the basis for each link \u2014
-             <i>issuer named</i>, <i>sector named</i>, <i>geography named</i> \u2014 and never as
-             a cause. <code>news.candidate_link.asserted</code> is pinned <b>false</b> by a
-             database CHECK, so promotion to a cause is impossible in the data model, not merely
-             discouraged in a prompt. Ranking a candidate into an explanation needs the relevancy
-             model, which is explicitly out of scope for this prototype.</p>
+           <p>Headline candidates are surfaced with the basis for each link \u2014 <i>issuer
+             named</i>, <i>sector named</i>, <i>geography named</i> \u2014 and never as a cause.
+             Promotion to a cause is blocked by the system, not merely discouraged: nothing here
+             can label a headline an explanation. Ranking one into an explanation needs a relevancy
+             model, which is out of scope for this prototype.</p>
            <p>What I would need to answer "why" honestly: an intraday tick series (entitled feed),
              a headline corpus with timestamps, and a ranking model with a measured precision
              floor. Absent those, "I do not know" is the correct answer and the cheap one.</p>`;
       return {rules, html:`${subject()}${disclosure}<span class="verdict v-ind">MOVE: ANSWERED \u00b7 CAUSE: UNKNOWN</span>
         ${head}${why}
-        <div class="cite"><b>move</b> md.v_security_price, computed last \u2212 prev_close \u00b7
-          <b>candidates</b> news.headline (allowlisted publishers) \u00b7
-          <b>asserted</b> false \u2014 CHECK-enforced<br><b>cite</b> ${QUOTE.cite}</div>`};
+        <div class="cite"><b>move</b> computed from last \u2212 prior close \u00b7
+          <b>headlines</b> allowlisted publishers only \u00b7
+          <b>cause</b> not asserted</div>`};
+    }
+
+    case "resolution": {
+      rules.push(`core.resolve_entity: ${SYNONYMS.length} synonyms \u2192 1 canonical id`);
+      // Every variant collapses to the same CIK. The page shows the canonical
+      // record and the CONFIDENCE each variant carries — never the variant
+      // spelling standing in for the name.
+      const byKind = {};
+      SYNONYMS.forEach(([k, kind]) => { byKind[kind] = (byKind[kind] || 0) + 1; });
+      const kinds = Object.entries(byKind)
+        .sort((a, b) => b[1] - a[1])
+        .map(([k, n]) => `${n} ${k.replace(/_/g, " ")}${n > 1 ? "s" : ""}`).join(", ");
+      const low = SYNONYMS.filter(x => x[2] < 0.90).length;
+      return {rules, html:`${subject()}<span class="verdict v-ok">ANSWER</span>
+        <p><b>${SYNONYMS.length} recorded variants</b> \u2014 legal name, short names, the
+        exchange-qualified ticker, eleven misspellings and two phonetic forms \u2014 all resolve to
+        one canonical identifier: <b>CIK
+        <a class="filing-lnk" href="${edgarIssuer(QUOTE.cik)}" target="_blank" rel="noopener noreferrer">${QUOTE.cik}</a></b>,
+        ${QUOTE.name}. Variants are matched on a normalized form and are <b>never displayed as
+        the name</b> \u2014 you always see the canonical record.</p>
+        <p>Type any of them into the box and the desk answers about ${QUOTE.name} \u2014 but it
+        answers <i>as</i> ${QUOTE.name}, and below 0.90 confidence it tells you it made a
+        provisional match rather than applying one silently.</p>
+        <p>On file: ${kinds}. Of those, <b>${low}</b> sit below the 0.90 confidence line, so the
+        desk tells you it made a provisional match instead of applying one silently.</p>
+        <p>Deliberately <b>absent</b>: <code>TRT:NVDA</code>, the Toronto-listed
+        CAD-hedged CDR. It shares the ticker and is a different instrument. A synonym table that
+        swallows it is worse than no synonym table.</p>
+        <div class="cite"><b>source</b> firm security master \u00b7 <b>canonical id</b> CIK ${QUOTE.cik}</div>`};
     }
 
     default:
       rules.push("gate_agent: ASK, under-specified");
-      return {rules, html:`<span class="verdict v-ind">ASK</span>
+      return {rules, html:`<span class="verdict v-ind">NEED MORE</span>
         <p>I did not get a task out of that. Ask me for a quote, a prior close, a position, or the
         filings behind a name \u2014 or load another S&amp;P 500 symbol in the box above the fold.</p>`};
   }
 }
 
+/* The audit trail is supervision and engineering evidence, not advisor UI. It is
+   OFF by default: an advisor asking for a price should see a price and its
+   provenance, not resolve_entity confidence scores and a call-budget counter.
+   A principal reviewing under Rule 3110, or an engineer, turns it on. */
 function ledger(rules){
   document.getElementById("ledger").innerHTML =
     `<span>rules fired</span> ${rules.map(r => "\u00b7 " + r).join("<br>")}<br>
@@ -1224,12 +1252,12 @@ document.getElementById("symform").onsubmit = e => {
 
 const SEEDS = [
   "What is NVDA trading at right now?",
-  "What is Nvidea trading at right now?",
   "Give me the bid and ask on NVDA",
   "Why is it down today?",
   "What did the Wilson NVDA position close at?",
   "What's that position worth right now?",
   "Any recent NVDA filings?",
+  "Resolve a fat-fingered name to its CIK",
   "What is AMD trading at?",
   "Should my client buy more NVDA?",
   "Draft this as an email to my client"
@@ -1239,10 +1267,13 @@ SEEDS.forEach(s => {
   const b = document.createElement("button");
   b.type = "button"; b.className = "seed";
   b.textContent = s;
-  if (s.includes("Nvidea")) b.title = "Misspelled on purpose \u2014 exercises the synonym table";
   b.onclick = () => { ask(s); };
   seeds.appendChild(b);
 });
+
+document.getElementById("audit").onchange = e => {
+  document.getElementById("ledger-wrap").hidden = !e.target.checked;
+};
 
 document.getElementById("form").onsubmit = e => {
   e.preventDefault();

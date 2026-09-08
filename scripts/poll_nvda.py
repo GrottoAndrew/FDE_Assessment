@@ -303,6 +303,12 @@ def budget_to_state(b: QuoteBudget, state: dict) -> None:
 def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
               now: datetime | None = None, record: bool = False,
               verify: bool = False, transport=None) -> dict:
+    # A pinned `now` means the caller owns the clock: a test, a replay, or a
+    # backfill. RT-10's fix stamped the fetch with wall-clock time unconditionally,
+    # which silently un-pinned it — an exhausted budget then served a cache entry
+    # timestamped in the future and reported it as fresh. Caught by
+    # test_exhausted_cap_fails_rather_than_returning_the_cached_row.
+    pinned = now is not None
     now = now or datetime.now(timezone.utc)
     out = {"ts": now.isoformat().replace("+00:00", "Z"), "edgar": None, "quote": None}
 
@@ -378,7 +384,7 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
                 # good fresh print failed validation on a slow EDGAR call. Stamp
                 # the fetch, not the cycle.
                 return normalize_chart(json.loads(r.body), delay_seconds,
-                                       datetime.now(timezone.utc))
+                                       now if pinned else datetime.now(timezone.utc))
             if r.status in (403, 429):
                 blocked["status"] = r.status
             raise ValueError(f"HTTP {r.status}")

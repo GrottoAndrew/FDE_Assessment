@@ -269,3 +269,16 @@ def test_a_no_data_cycle_exits_non_zero():
                 "INDETERMINATE_DISAGREEMENT", "FALLBACK_REQUIRED", "FAILED"):
         assert bad not in GREEN
     assert mod  # the module imports; the gate itself is asserted above
+
+
+def test_a_pinned_clock_stays_pinned_through_the_fetch():
+    """RT-10 regression. Stamping the fetch with wall-clock time even when the
+    caller pinned `now` un-pinned the whole cycle: the cache entry landed in the
+    future relative to the simulated clock, so the TTL never expired and an
+    exhausted budget served a stale row it should have refused."""
+    f = FakeFetcher({"data.sec.gov": Response(304), "query1": Response(200, json.dumps(CHART).encode())})
+    st = _state()
+    out = poll_once(f, st, cap=500, delay_seconds=900, pacing=False, now=NOW)
+    assert out["quote"]["row"]["retrieved_at_utc"] == NOW.isoformat().replace("+00:00", "Z")
+    cached = list(st["quote_cache"].values())[0]
+    assert cached["retrieved_epoch"] == NOW.timestamp()
