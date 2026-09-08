@@ -9,7 +9,12 @@ poll_nvda.py — one poll cycle for NVDA: EDGAR filings + delayed price.
 Cron (the durable form — a session dies, a crontab does not). Every 15 minutes,
 regular session only, Mon-Fri, in the box's local time:
 
-    */15 13-20 * * 1-5  cd /path/to/FDE_Assessment && .venv/bin/python scripts/poll_nvda.py --once >> logs/poll.log 2>&1
+    */20 13-20 * * 1-5  cd /path/to/FDE_Assessment && .venv/bin/python scripts/poll_nvda.py --once --interval 20 >> logs/poll.log 2>&1
+
+TWENTY minutes, not fifteen: 15-min polling is 27 calls a day x 21 days = 567
+against a 500 cap, and --once REFUSES TO START on a schedule that cannot fit.
+20 min is 20/day = 420/month with 80 calls of headroom. Change the cap and the
+interval together or the cron line is decorative (RED TEAM RT-09).
 
 TWO SOURCES, TWO BUDGETS, because they fail differently:
 
@@ -44,6 +49,7 @@ import json
 import os
 import ssl
 import sys
+import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -55,7 +61,8 @@ sys.path.insert(0, str(ROOT))
 
 from src.common.market_models import (PRICE_SOURCE, PRICE_SOURCE_DELAY_SECONDS,  # noqa: E402
                                       PRICE_SOURCE_PARAMS, PRICE_SOURCE_UNAVAILABLE,
-                                      SEC_FORM_ALLOWLIST, FilingRow, QuoteSnapshot)
+                                      PRICE_SOURCE_URL, SEC_FORM_ALLOWLIST,
+                                      FilingRow, QuoteSnapshot)
 from src.common.market_clock import reading as clock_reading  # noqa: E402
 from src.common.pull_guard import Outcome, guarded_pull  # noqa: E402
 from src.common.quote_budget import CachedQuote, Decision, QuoteBudget  # noqa: E402
@@ -65,7 +72,7 @@ TICKER = "NVDA"
 FIGI = "BBG000BBJQV0"       # NVDA common; resolve through md.security, never by ticker
 
 EDGAR_URL = f"https://data.sec.gov/submissions/CIK{CIK}.json"
-CHART_URL = f"https://query1.finance.yahoo.com/v8/finance/chart/{TICKER}"
+CHART_URL = PRICE_SOURCE_URL.format(ticker=TICKER)   # one definition, in market_models
 CHART_PARAMS = PRICE_SOURCE_PARAMS   # HARDCODED in market_models (ADR-0010)
 
 STATE_PATH = ROOT / "eval_output" / ".poll_state.json"
@@ -154,6 +161,13 @@ class UrllibFetcher:
                 return Response(r.status, r.read(), dict(r.headers))
         except urllib.error.HTTPError as e:
             return Response(e.code, e.read() if e.fp else b"", dict(e.headers or {}))
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            # RED TEAM RT-03. Only HTTPError was caught, so a DNS failure, a reset
+            # connection or a 30-second timeout propagated out of the EDGAR leg and
+            # took the price leg down with it — and main() never reached
+            # save_state(), so the ETag and the call counters were lost too. A
+            # transport failure is status 0: a failed call, never a default.
+            return Response(0, str(e).encode()[:500], {})
 
 
 # ---------------------------------------------------------------------------
@@ -299,11 +313,20 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
     elif state.get("edgar_last_modified"):
         headers["If-Modified-Since"] = state["edgar_last_modified"]
     r = fetcher.get(EDGAR_URL, headers)
+    if r.status == 200:
+        try:
+            _edgar_payload = json.loads(r.body)
+        except (ValueError, TypeError) as exc:
+            # RED TEAM RT-04: an HTML error page with a 200 raised out of the cycle.
+            r = Response(0, f"unparseable body: {exc}".encode()[:500], {})
+            _edgar_payload = None
+    else:
+        _edgar_payload = None
+
     if r.status == 304:
         out["edgar"] = {"status": "not_modified", "new_filings": 0}
     elif r.status == 200:
-        payload = json.loads(r.body)
-        rows = normalize_submissions(payload, state.get("last_accession"))
+        rows = normalize_submissions(_edgar_payload, state.get("last_accession"))
         if rows:
             state["last_accession"] = rows[0].accession_no
         state["edgar_etag"] = r.headers.get("ETag")
@@ -314,7 +337,8 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
             _freeze("filings", dumped, now)
     else:
         # Never a default. A failed call is FAILED, and the caller writes ops.failure_log.
-        out["edgar"] = {"status": "FAILED", "http_status": r.status}
+        out["edgar"] = {"status": "FAILED", "http_status": r.status,
+                        "detail": r.body.decode("utf-8", "replace")[:200] or None}
 
     # --- PRICE: clock, then budget, then the guarded pull. -------------------
     # The clock runs before the budget because a call outside the regular session
@@ -329,7 +353,16 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
     b = budget_from_state(state, cap, pacing)
     decision = b.decide(FIGI, ck.session.value, now=now.timestamp())
     if decision is Decision.SERVE_CACHE:
-        out["quote"] = {"status": "cache", "spent": 0}
+        hit = b.cached(FIGI)
+        # RED TEAM RT-07: this branch used to return {"status":"cache"} and no row,
+        # so the dedupe that justifies the whole budget delivered nothing to the
+        # caller. The cached row is served WITH its venue timestamp, so the desk
+        # discloses age rather than implying freshness.
+        out["quote"] = {"status": "cache", "spent": 0,
+                        "row": hit.payload if hit else None,
+                        "cache_age_seconds": int(now.timestamp() - hit.retrieved_epoch) if hit else None,
+                        "as_of_at_utc": datetime.fromtimestamp(hit.as_of_epoch, timezone.utc)
+                                        .isoformat().replace("+00:00", "Z") if hit else None}
     elif decision is Decision.BUDGET_EXHAUSTED:
         out["quote"] = {"status": "FAILED", "reason": "budget_exhausted",
                         "calls_used": b.calls_used(now.timestamp()), "cap": cap}
@@ -339,7 +372,13 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
         def _fetch():
             r = fetcher.get(f"{CHART_URL}?{CHART_PARAMS}", {"Accept": "application/json"})
             if r.status == 200:
-                return normalize_chart(json.loads(r.body), delay_seconds, now)
+                # RED TEAM RT-10: retrieved_at was the top of the cycle, which the
+                # EDGAR leg can precede by 30 seconds. QuoteSnapshot rejects
+                # as_of > retrieved as "a quote from the future", so a perfectly
+                # good fresh print failed validation on a slow EDGAR call. Stamp
+                # the fetch, not the cycle.
+                return normalize_chart(json.loads(r.body), delay_seconds,
+                                       datetime.now(timezone.utc))
             if r.status in (403, 429):
                 blocked["status"] = r.status
             raise ValueError(f"HTTP {r.status}")
@@ -352,10 +391,12 @@ def poll_once(fetcher, state: dict, cap: int, delay_seconds: int, pacing: bool,
         if res.outcome is Outcome.OK and res.quote is not None:
             payload = res.quote.model_dump(mode="json")
             payload["halt_verified"] = res.halt_verified
-            b._cache[FIGI] = CachedQuote(figi=FIGI, payload=payload,
-                                         as_of_epoch=res.quote.as_of_at_utc.timestamp(),
-                                         retrieved_epoch=now.timestamp(), source=PRICE_SOURCE,
-                                         delay_seconds=delay_seconds, session=ck.session.value)
+            # calls_spent is already charged above, so cache without re-charging.
+            b._cache[FIGI] = CachedQuote(
+                figi=FIGI, payload=payload,
+                as_of_epoch=res.quote.as_of_at_utc.timestamp(),
+                retrieved_epoch=res.quote.retrieved_at_utc.timestamp(),
+                source=PRICE_SOURCE, delay_seconds=delay_seconds, session=ck.session.value)
             out["quote"] = {"status": "ok", "spent": res.calls_spent, "row": payload,
                             "halt_verified": res.halt_verified,
                             "remaining": b.remaining(now.timestamp())}
@@ -423,8 +464,18 @@ def main() -> int:
                        record=a.record)
     save_state(state)
     print(json.dumps(result, indent=2))
-    failed = [k for k in ("edgar", "quote") if (result.get(k) or {}).get("status") == "FAILED"]
-    return 1 if failed else 0
+    # RED TEAM RT-11. This compared status == "FAILED" exactly, so
+    # FAILED_NO_DATA, INDETERMINATE_HALTED, INDETERMINATE_DISAGREEMENT and
+    # FALLBACK_REQUIRED all exited 0 and cron recorded a clean run. Every state
+    # that is not a servable quote or a deliberate skip exits non-zero.
+    GREEN = {"ok", "cache", "not_modified", "SKIPPED"}
+    bad = [f"{k}={(result.get(k) or {}).get('status')}"
+           for k in ("edgar", "quote")
+           if (result.get(k) or {}).get("status") not in GREEN]
+    if bad:
+        print("NOT GREEN: " + ", ".join(bad), file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

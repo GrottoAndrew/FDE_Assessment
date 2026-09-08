@@ -26,6 +26,11 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 
 CALENDAR_SOURCE = "NYSE published holiday calendar"
+# The window is bounded at BOTH ends. RED TEAM RT-02: with only an upper bound,
+# any earlier date was scored against the 2026 holiday table, so 2025-12-25 and
+# 2024-07-04 both read back as "regular session". A backfill or a replayed
+# fixture would have been marked tradeable on Christmas.
+CALENDAR_VERIFIED_FROM = date(2026, 1, 1)
 CALENDAR_VERIFIED_THROUGH = date(2026, 12, 31)
 
 # Full closures.
@@ -93,9 +98,9 @@ def reading(now: datetime | None = None) -> ClockReading:
     et = now_utc.astimezone(ET)
     d = et.date()
 
-    if d > CALENDAR_VERIFIED_THROUGH:
+    if d < CALENDAR_VERIFIED_FROM or d > CALENDAR_VERIFIED_THROUGH:
         return ClockReading(now_utc, et, d, Session.UNKNOWN, False, False, False, False,
-                            f"calendar verified only through {CALENDAR_VERIFIED_THROUGH}; "
+                            f"calendar verified only {CALENDAR_VERIFIED_FROM}..{CALENDAR_VERIFIED_THROUGH}; "
                             "refusing to assert a session")
 
     if et.weekday() >= 5:

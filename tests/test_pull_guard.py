@@ -155,3 +155,32 @@ def test_the_recheck_on_no_data_happens_even_with_verify_off():
     f = Seq(None, _q("226.04"))
     r = guarded_pull(f, FIGI, TICKER, now=OPEN, verify=False)
     assert r.outcome is Outcome.OK and f.calls == 2
+
+
+def test_a_failed_pull_keeps_the_reason_it_failed():
+    """RT-05. The exception was discarded, so a schema bug and a vendor outage
+    produced byte-identical rows in ops.failure_log."""
+    def boom():
+        raise ValueError("226.03999328613281 has more than 6 decimal places")
+    res = guarded_pull(boom, FIGI, TICKER, now=OPEN)
+    assert res.outcome is Outcome.FAILED_NO_DATA
+    assert len(res.evidence["errors"]) == 2
+    assert "decimal places" in res.evidence["errors"][0]
+
+
+def test_a_recovered_read_is_not_labelled_verified():
+    """RT-06. The recovery path reused the attempts==2 branch and wrote
+    "verified by a second read" into the audit record. Nothing was verified —
+    the first read failed and the second had nothing to compare against."""
+    calls = {"n": 0}
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("empty payload")
+        return _q()
+    res = guarded_pull(flaky, FIGI, TICKER, now=OPEN)
+    assert res.outcome is Outcome.OK
+    assert res.attempts == 2
+    assert "verified" not in res.reason
+    assert res.evidence["recovered_on_second_check"] is True
+    assert "empty payload" in res.evidence["first_read_error"]

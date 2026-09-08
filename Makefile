@@ -10,7 +10,7 @@ preflight: ## run the morning-of checks — do this BEFORE the sprint
 	.venv/bin/python scripts/preflight.py
 
 setup:   ## create venv + install
-	python3 -m venv .venv && .venv/bin/pip install -q -U pip pytest pyyaml jsonschema
+	python3 -m venv .venv && .venv/bin/pip install -q -U pip -r requirements.txt
 
 test:    ## run the full test suite (contracts first)
 	.venv/bin/pytest -q tests/
@@ -21,8 +21,8 @@ tdd:     ## watch-mode-ish: run only contract tests, fail fast
 schema:  ## print the DDL that must be applied before anything runs
 	@cat src/data/schema/*.sql
 
-seed:    ## generate synthetic data into src/data/synthetic/
-	.venv/bin/python scripts/gen_synthetic.py
+seed:    ## load the demonstration slice (alias for seed-nvda; gen_synthetic.py was never written)
+	$(MAKE) seed-nvda
 
 eval:    ## run the full golden-set eval, write to eval_output/
 	.venv/bin/python eval_workflows/run_evals.py --golden $(or $(GOLDEN),eval_workflows/golden/golden_set.jsonl)
@@ -39,11 +39,13 @@ dbreport: ## structural analysis of the live local instance
 seed-nvda: ## load the NVDA demonstration slice (entity, security, synonyms)
 	psql "$(or $(DATABASE_URL),postgresql:///fde)" -v ON_ERROR_STOP=1 -f src/data/synthetic/nvda_slice.sql
 
+# 20, not 15: a 15-minute schedule is 567 calls/month against a 500 cap and
+# --once refuses to start on it, so `make poll` was a dead target (RT-09).
 pollplan: ## budget arithmetic for the NVDA schedule — no network
-	.venv/bin/python scripts/poll_nvda.py --plan --interval $(or $(IV),15) --cap $(or $(CAP),500)
+	.venv/bin/python scripts/poll_nvda.py --plan --interval $(or $(IV),20) --cap $(or $(CAP),500)
 
 poll:    ## one NVDA poll cycle (EDGAR + delayed price), recording golden fixtures
-	.venv/bin/python scripts/poll_nvda.py --once --record --interval $(or $(IV),15) --cap $(or $(CAP),500)
+	.venv/bin/python scripts/poll_nvda.py --once --record --interval $(or $(IV),20) --cap $(or $(CAP),500)
 
 clean:
 	rm -rf .venv .pytest_cache __pycache__ eval_output/*/raw

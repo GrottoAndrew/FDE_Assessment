@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from src.common.market_clock import (CALENDAR_VERIFIED_THROUGH, Session,
+from src.common.market_clock import (CALENDAR_VERIFIED_FROM, CALENDAR_VERIFIED_THROUGH, Session,
                                      is_open, reading)
 
 
@@ -76,3 +76,16 @@ def test_only_the_regular_session_may_produce_a_current_quote():
 def test_a_naive_datetime_is_refused():
     with pytest.raises(ValueError):
         reading(datetime(2026, 9, 8, 13, 45))
+
+
+def test_a_date_before_the_verified_window_is_unknown_not_open():
+    """RT-02. The calendar was bounded only above, so any earlier date was scored
+    against the 2026 holiday table: 2025-12-25 and 2024-07-04 both read back as
+    "regular session". A backfill or a replayed fixture would have been marked
+    tradeable on Christmas."""
+    from src.common.market_clock import Session, reading
+    for d in ("2025-12-25", "2024-07-04", "2025-09-08"):
+        r = reading(datetime.fromisoformat(d + "T15:00:00+00:00"))
+        assert r.session is Session.UNKNOWN, d
+        assert not r.may_fetch_current_quote
+        assert not r.calendar_verified

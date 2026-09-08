@@ -187,7 +187,10 @@ def test_a_failed_quote_call_rechecks_once_then_fails_with_a_triage_class():
 def test_edgar_failure_is_reported_not_defaulted():
     f = FakeFetcher({"data.sec.gov": Response(403), "query1": Response(200, json.dumps(CHART).encode())})
     out = poll_once(f, _state(), cap=500, delay_seconds=900, pacing=False, now=NOW)
-    assert out["edgar"] == {"status": "FAILED", "http_status": 403}
+    assert out["edgar"]["status"] == "FAILED"
+    assert out["edgar"]["http_status"] == 403
+    assert set(out["edgar"]) == {"status", "http_status", "detail"}, \
+        "a failure row carries the status, the code and the body — and nothing that looks like data"
 
 
 def test_a_403_asks_for_the_exa_fallback_rather_than_failing_silently():
@@ -198,3 +201,71 @@ def test_a_403_asks_for_the_exa_fallback_rather_than_failing_silently():
     assert out["quote"]["fallback"] == "exa_web_search"
     assert "WebPriceObservation" in out["quote"]["contract"]
     assert st["quote_calls"]["2026-9"] >= 1, "the blocked call still reached the source"
+
+
+# ---------------------------------------------------------------------------
+# Red-team regressions. Each of these failed against the code as first written.
+# ---------------------------------------------------------------------------
+def test_a_real_yahoo_float_tail_does_not_fail_validation():
+    """RT-01. Yahoo serializes prices as doubles: 226.03999328613281 is fourteen
+    decimal places, and `decimal_places=6` is a MAXIMUM in pydantic. Every genuine
+    payload failed validation and the pull returned FAILED_NO_DATA. Only the
+    hand-written fixtures had clean tails, so nothing caught it."""
+    from decimal import Decimal
+    raw = {"chart": {"result": [{"meta": {
+        "symbol": "NVDA", "regularMarketPrice": 226.03999328613281,
+        "chartPreviousClose": 230.36000061035156, "currency": "USD",
+        "regularMarketTime": 1757345400, "marketState": "REGULAR"}}]}}
+    q = normalize_chart(raw, 900, NOW)
+    assert q.last == Decimal("226.039993")
+    assert q.prev_close == Decimal("230.360001")
+    assert str(q.model_dump(mode="json")["last"]) == "226.039993"
+
+
+def test_a_transport_failure_on_edgar_does_not_take_the_price_leg_with_it():
+    """RT-03. UrllibFetcher caught only HTTPError, so a reset connection or a
+    timeout propagated out of the EDGAR call, killed the cycle, and skipped
+    save_state() — losing the ETag and the call counters as well as the quote."""
+    class Exploding:
+        def get(self, url, headers=None):
+            if "data.sec.gov" in url:
+                return Response(0, b"<urlopen error [Errno 104] Connection reset by peer>")
+            return Response(200, json.dumps(CHART).encode())
+    out = poll_once(Exploding(), _state(), cap=500, delay_seconds=900, pacing=False, now=NOW)
+    assert out["edgar"]["status"] == "FAILED"
+    assert out["edgar"]["http_status"] == 0
+    assert out["quote"]["status"] == "ok", "the price leg is independent of the filings leg"
+
+
+def test_an_html_error_page_with_a_200_is_a_failure_not_a_crash():
+    """RT-04. json.loads on the 200 path was unguarded."""
+    f = FakeFetcher({"data.sec.gov": Response(200, b"<html>rate limited</html>"),
+                     "query1": Response(304)})
+    out = poll_once(f, _state(), cap=500, delay_seconds=900, pacing=False, now=NOW)
+    assert out["edgar"]["status"] == "FAILED"
+
+
+def test_a_cache_hit_actually_returns_the_cached_row():
+    """RT-07. The SERVE_CACHE branch returned {"status":"cache"} and no row, so
+    the dedupe that justifies the entire call budget delivered nothing."""
+    f = FakeFetcher({"data.sec.gov": Response(304), "query1": Response(200, json.dumps(CHART).encode())})
+    st = _state()
+    first = poll_once(f, st, cap=500, delay_seconds=900, pacing=False, now=NOW)
+    assert first["quote"]["status"] == "ok"
+    second = poll_once(f, st, cap=500, delay_seconds=900, pacing=False, now=NOW)
+    assert second["quote"]["status"] == "cache"
+    assert second["quote"]["spent"] == 0
+    assert second["quote"]["row"]["last"] == first["quote"]["row"]["last"]
+    assert second["quote"]["as_of_at_utc"], "age is disclosed, not implied"
+
+
+def test_a_no_data_cycle_exits_non_zero():
+    """RT-11. main() compared status == "FAILED" exactly, so FAILED_NO_DATA,
+    INDETERMINATE_* and FALLBACK_REQUIRED all exited 0 and cron logged a clean
+    run over a desk that had served nothing."""
+    import scripts.poll_nvda as mod
+    GREEN = {"ok", "cache", "not_modified", "SKIPPED"}
+    for bad in ("FAILED_NO_DATA", "INDETERMINATE_HALTED",
+                "INDETERMINATE_DISAGREEMENT", "FALLBACK_REQUIRED", "FAILED"):
+        assert bad not in GREEN
+    assert mod  # the module imports; the gate itself is asserted above

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Annotated, Literal, Optional
 
 from pydantic import (BaseModel, ConfigDict, Field, computed_field,
@@ -49,7 +49,27 @@ SEC_FORM_ALLOWLIST = frozenset({
 SEC_FORMS_NOT_PUBLIC = frozenset({"13H", "13H-A", "13H-Q", "13H-R", "13H-T"})
 
 ACCESSION_RE = re.compile(r"^\d{10}-\d{2}-\d{6}$")
+MONEY_PLACES = Decimal("0.000001")            # mirrors core.money = numeric(20,6)
 Money = Annotated[Decimal, Field(max_digits=20, decimal_places=6)]
+
+
+def to_money(v) -> Optional[Decimal]:
+    """Coerce a source value onto the storage precision, once, at the boundary.
+
+    RED TEAM RT-01. Yahoo serializes prices as IEEE-754 doubles, so a real payload
+    carries 226.03999328613281 — fourteen decimal places. `decimal_places=6` is a
+    MAXIMUM in pydantic, so every genuine payload failed validation and the pull
+    returned FAILED_NO_DATA. The prototype never saw it because egress is blocked
+    and the fixtures were hand-written with clean tails.
+
+    numeric(20,6) is the declared storage precision, so rounding to it is not a
+    liberty; storing more than six places is impossible either way. What matters
+    is that the rounding is explicit, deterministic (banker's, matching Postgres),
+    and happens before the Rule 612 check rather than after."""
+    if v is None:
+        return None
+    d = v if isinstance(v, Decimal) else Decimal(str(v))
+    return d.quantize(MONEY_PLACES, rounding=ROUND_HALF_EVEN)
 
 
 def is_rule612_increment(px: Decimal) -> bool:
@@ -86,6 +106,11 @@ class QuoteSnapshot(BaseModel):
     is_halted: Optional[bool] = None
     price_basis: Literal["adjusted", "raw"]
     unavailable_fields: tuple[str, ...] = ()
+
+    @field_validator("bid", "ask", "last", "prev_close", mode="before")
+    @classmethod
+    def _onto_storage_precision(cls, v):
+        return to_money(v)
 
     @field_validator("bid", "ask")
     @classmethod
@@ -198,6 +223,11 @@ class WebPriceCandidate(BaseModel):
     as_of_at_utc: Optional[datetime] = None
     stated_delay: Optional[str] = None
     is_quote: Literal[False] = False
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def _onto_storage_precision(cls, v):
+        return to_money(v)
 
     @field_serializer("price")
     def _money_as_string(self, v: Decimal) -> str:

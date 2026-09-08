@@ -126,11 +126,18 @@ def guarded_pull(
                       "trade_date": str(clock.trade_date),
                       "calendar_verified": clock.calendar_verified})
 
+    errors: list[str] = []
+
     def _try() -> Optional[QuoteSnapshot]:
+        """A validation failure is no data, not partial data — but the REASON is
+        kept. RED TEAM RT-05: discarding the exception made a schema bug and a
+        source outage produce byte-identical failure rows, so ops.failure_log
+        could not tell "the vendor is down" from "our parser is broken"."""
         try:
             return fetch()
-        except Exception:
-            return None       # a validation failure is no data; the caller logs it
+        except Exception as exc:
+            errors.append(f"{type(exc).__name__}: {exc}"[:400])
+            return None
 
     # 2/3. FETCH, then exactly one SECOND CHECK on empty or invalid.
     first = _try()
@@ -143,11 +150,13 @@ def guarded_pull(
                 outcome=Outcome.FAILED_NO_DATA, attempts=attempts, calls_spent=spent,
                 triage_class="source_unavailable",
                 reason="two consecutive reads returned no usable data",
-                evidence={"session": clock.session.value})
+                evidence={"session": clock.session.value, "errors": errors})
         first = second       # the re-check succeeded; use it, and do not compare
         # a single good read after an empty one has nothing to compare against
         return _finish(first, figi, ticker, attempts, spent, halt_check, transport,
-                       evidence={"recovered_on_second_check": True})
+                       evidence={"recovered_on_second_check": True,
+                                 "first_read_error": errors[0] if errors else None},
+                       reason="recovered on a second read; nothing to compare against")
 
     # 4. COMPARE — a second read of a good first read, to catch incorrect data.
     if not verify:
@@ -160,7 +169,7 @@ def guarded_pull(
             outcome=Outcome.INDETERMINATE_DISAGREEMENT, attempts=attempts, calls_spent=spent,
             triage_class="unstable_source", quote=None,
             reason="first read succeeded, verification read returned nothing",
-            evidence={"first_last": str(first.last)})
+            evidence={"first_last": str(first.last), "errors": errors})
 
     a, b = first.last, second.last
     if a is None or b is None:
@@ -180,7 +189,7 @@ def guarded_pull(
 
 def _finish(quote: QuoteSnapshot, figi: str, ticker: str, attempts: int, spent: int,
             halt_check: HaltCheck | None, transport: Transport | None,
-            evidence: dict) -> PullResult:
+            evidence: dict, reason: str | None = None) -> PullResult:
     # 5. HALT — last, because it is the only step that sends mail.
     status = (halt_check or UnavailableHaltCheck()).status(figi)
     if status is HaltStatus.HALTED:
@@ -196,5 +205,5 @@ def _finish(quote: QuoteSnapshot, figi: str, ticker: str, attempts: int, spent: 
     return PullResult(
         outcome=Outcome.OK, quote=quote, attempts=attempts, calls_spent=spent,
         halt_verified=(status is HaltStatus.TRADING),
-        reason="verified by a second read" if attempts == 2 else "single read",
+        reason=reason or ("verified by a second read" if attempts == 2 else "single read"),
         evidence={**evidence, "halt_status": status.value})
