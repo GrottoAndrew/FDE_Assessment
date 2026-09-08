@@ -8,7 +8,15 @@ is a gap someone else finds for you.
 
 | # | ambiguity | assumption chosen | if wrong | asked? |
 |---|---|---|---|---|
-| A1 | | | | |
+| A1 | Third requested sub-agent is garbled ("agent grep Macro News, Agent,") | it is an SEC filings agent (`filing_fact_agent`), since EDGAR is named primary | if it meant positions/quantity, Orion moves from context to critical path | **open — G-17** |
+| A2 | Who holds the real-time market-data entitlement | nobody new; prototype uses delayed data, labeled, entitlement check stubbed but present | a live-quote demo is not lawful to display without it | **open — G-02** |
+| A3 | Source of position quantity | Orion, T-1 reconciled, `as_of` carried on every row | T-1 quantity x live price is silently wrong after any intraday trade | **open — G-08** |
+| A4 | "OSS" in the brief | open/public sources (SEC, FRED, BLS, exchange notices) | licensed newswires make source licensing a blocking prerequisite | **open — G-16** |
+| A5 | Price precision vs `core.money_minor` | prices are `numeric(18,6)`; minor units stay for settled amounts | sub-$1 quotes are unrepresentable under the repo-wide money rule | ADR-0007 |
+| A6 | Silo rule vs synchronous Q&A | declared parent-to-child synchronous calls; `handoff_queue` for observations only | a strictly async silo returns an empty answer for a multi-source question | ADR-0006 |
+| A7 | Security identifier | FIGI internally, CIK for issuers; CUSIP only where Orion already licenses it | a ticker-keyed cache eventually returns a dead issuer's price | G-05, G-06 |
+| A8 | Scope of the error agent | run-failure triage; data-integrity checks are hardcoded rules inside the quote agent | crossed/stale quote detection has no owner | **open — G-12** |
+| A9 | Retention vs 50% compaction | raw turn is persisted before compaction; compaction applies to working context only | a compacted summary is not the communication SEA 17a-4 requires | G-13 |
 
 ## Standing risks in this architecture
 
