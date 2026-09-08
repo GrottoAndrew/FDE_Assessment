@@ -7,7 +7,7 @@ Verified live on 2026-09-08. Re-run the verification block the morning of.
 | # | thing | status | action |
 |---|---|---|---|
 | 1 | **GitHub** `GrottoAndrew/FDE_Assessment` | ✅ connected, pushed, tracking `origin/main` | none |
-| 2 | **`ANTHROPIC_API_KEY`** in `.env` | ⚠️ set, authenticates, but **org-level — every call 400s** | get a workspace-scoped key, or set `ANTHROPIC_WORKSPACE_ID` — see below |
+| 2 | **`ANTHROPIC_API_KEY`** in `.env` | ⚠️ this org mints **org-scoped** keys by default, and those 400 on every call | create the sprint key *inside a workspace* — see below |
 | 3 | **A live Postgres** for the canonical + ISO schema | ✅ dedicated Supabase project `krnkvkunhwwfdqeqnikg` wired via project-scoped MCP | authenticate it once — see below |
 | 4 | **Python venv** | ✅ `.venv` built, pytest + pyyaml installed | none |
 
@@ -59,29 +59,31 @@ network dependency. Have this ready as plan B.
     brew install postgresql@17 && brew services start postgresql@17
     createdb fde && export DATABASE_URL="postgresql://localhost:5432/fde"
 
-### On item 2 — the API key is not usable as-is
+### On item 2 — create the key inside a workspace
 
-The key in `.env` authenticates (a bad key returns 401; this returns **400**),
-but it is scoped to the organization rather than to a workspace, so every request
-is rejected:
+**This is a property of the organization, not of one key.** Tested 2026-09-08:
+a key issued at org level authenticates fine (a bad key returns 401; an
+org-scoped key returns **400**) but every request is rejected:
 
     This API key is not scoped to a workspace, so this request must include
     the anthropic-workspace-id header with the ID of the workspace to use.
 
-Verified against both `/v1/models` and `/v1/messages/count_tokens` — it is not an
-endpoint quirk. **Fix it before sprint day; discovering this at T-20 costs you
-the build.**
+Confirmed against both `/v1/models` and `/v1/messages/count_tokens`, so it is not
+an endpoint quirk — nothing works. Whatever key you mint on sprint day will hit
+this unless you create it in the right place.
 
-**Option A (recommended).** Console → Settings → API keys → create a key *inside a
-workspace*. Drop it into `.env`, leave `ANTHROPIC_WORKSPACE_ID` blank, done. No
+**Do this:** Console → Settings → API keys → create the key **inside a
+workspace**. Paste into `.env`, leave `ANTHROPIC_WORKSPACE_ID` blank. No
 per-request header, nothing for the SDK to special-case.
 
-**Option B.** Keep the org key and set `ANTHROPIC_WORKSPACE_ID=wrkspc_...` in
-`.env` (Console → Settings → Workspaces; the id is in the URL). Every client must
-then send `anthropic-workspace-id` on every call — one more thing to get wrong in
-a hurry.
+**If you are stuck with an org key:** set `ANTHROPIC_WORKSPACE_ID=wrkspc_...` in
+`.env` (Console → Settings → Workspaces; the id is in the URL) and make every
+client send `anthropic-workspace-id` on every call. `scripts/preflight.py` reads
+the variable and sends the header, so it will verify this path too — but it is
+one more thing to get wrong in a hurry.
 
-Either way, re-run `make preflight` until the model check is green.
+Either way: `make preflight` until the model check is green. It takes seconds and
+tells you which of the two cases you are in.
 
 ## Tier 2 — verified live, useful if the problem happens to fit
 
