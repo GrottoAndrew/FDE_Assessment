@@ -1,0 +1,1257 @@
+<title>Advisor Quote Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* ===========================================================================
+   PALETTE — APPROXIMATED, NOT OFFICIAL.
+   Perficient refreshed its brand in March 2026 from black/red to dark green
+   and white. The exact hex values are not published in any public source
+   (media kit ships logos only). These greens are derived from that published
+   description. Swap this one block for the real values from the brand kit —
+   nothing else in the file hardcodes a color.
+   =========================================================================== */
+:root{
+  --brand-900:#0F2A1E; --brand-700:#1B4332; --brand-500:#2D6A4F; --brand-300:#7FA894;
+  --brand-050:#EAF1ED;
+  --ink:#121A16; --ink-2:#3C4A43; --muted:#67756D; --rule:#DCE4DF;
+  --paper:#F7F9F8; --surface:#FFFFFF; --surface-2:#F1F5F3;
+  --ok:#2D6A4F; --warn:#8A6112; --warn-bg:#FDF6E7; --crit:#8C2F22; --crit-bg:#FBEFED;
+  --shadow:0 1px 2px rgba(15,42,30,.06), 0 8px 24px rgba(15,42,30,.05);
+  --sans:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+/* Single deliberate light world: the desk is specified light-ground / dark-text
+   and every color is painted explicitly, so it holds on any host ground. */
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);
+     font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
+a{color:var(--brand-700)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+
+/* --- masthead ------------------------------------------------------------ */
+.mast{background:var(--brand-900);color:#fff}
+.mast .wrap{display:flex;align-items:center;gap:16px;padding-top:12px;padding-bottom:12px;flex-wrap:wrap}
+.mark{width:26px;height:26px;border:2px solid #fff;border-radius:5px;display:grid;place-items:center;
+      font-weight:700;font-size:13px;transform:rotate(-6deg);flex:0 0 auto}
+.mast h1{font-size:15px;font-weight:600;letter-spacing:.01em}
+.mast .sub{color:var(--brand-300);font-size:12.5px}
+.mast .spacer{flex:1}
+.who{font-family:var(--mono);font-size:12px;color:var(--brand-300)}
+
+/* --- pinned quote rail --------------------------------------------------- */
+.rail{position:sticky;top:0;z-index:20;background:var(--surface);
+      border-bottom:1px solid var(--rule);box-shadow:var(--shadow)}
+.rail .wrap{padding-top:14px;padding-bottom:14px}
+.railtop{display:flex;align-items:flex-start;gap:22px;flex-wrap:wrap}
+.sym{min-width:190px}
+.sym .tick{font-family:var(--mono);font-size:26px;font-weight:600;letter-spacing:.02em}
+.sym .nm{font-size:12.5px;color:var(--muted)}
+.sym{min-width:236px}
+.sym .ids{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:3px}
+.sym .ids a{color:var(--brand-500);text-decoration:none;border-bottom:1px dotted var(--brand-300)}
+.sym .ids a:hover,.sym .ids a:focus-visible{color:var(--brand-700);border-bottom-style:solid}
+.sr{position:absolute;left:-9999px}
+.symsw{display:flex;gap:6px;margin-top:10px}
+.symsw input{width:118px;font-family:var(--mono);font-size:12px;text-transform:uppercase;
+  padding:6px 8px;border:1px solid var(--rule);border-radius:6px;background:var(--surface);color:var(--ink)}
+.symsw input:focus-visible{outline:2px solid var(--brand-500);outline-offset:1px;border-color:var(--brand-500)}
+.symsw button{font:inherit;font-size:12px;padding:6px 11px;border:1px solid var(--brand-700);
+  border-radius:6px;background:var(--brand-700);color:#fff;cursor:pointer}
+.symsw button:hover{background:var(--brand-900)}
+.symnote{font-size:10.5px;line-height:1.45;color:var(--muted);margin-top:6px;max-width:236px}
+.subj{font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--surface-2);
+  border-left:2px solid var(--brand-500);padding:5px 9px;border-radius:0 4px 4px 0;margin-bottom:9px}
+.subj-n{color:var(--muted);font-family:var(--sans);font-size:10.5px}
+.filing-lnk{color:var(--brand-500);text-decoration:none;border-bottom:1px dotted var(--brand-300)}
+.filing-lnk:hover{color:var(--brand-700);border-bottom-style:solid}
+.figs{display:flex;gap:26px;flex-wrap:wrap;flex:1}
+.fig{min-width:96px}
+.fig .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.fig .v{font-family:var(--mono);font-size:21px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.25}
+.fig .v.na{color:var(--muted);font-size:16px}
+.fig .why{font-size:10.5px;color:var(--muted);max-width:180px;line-height:1.35}
+.dn{color:var(--crit)} .up{color:var(--ok)}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.chip{font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:3px;
+      border:1px solid var(--rule);background:var(--surface-2);color:var(--ink-2);white-space:nowrap}
+.chip.warn{background:var(--warn-bg);border-color:#E8D5A8;color:var(--warn)}
+.chip.crit{background:var(--crit-bg);border-color:#E6C3BD;color:var(--crit)}
+.chip.ok{background:var(--brand-050);border-color:#C6DBCF;color:var(--brand-700)}
+
+/* --- layout -------------------------------------------------------------- */
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:26px;padding:26px 0 46px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:8px}
+.phead{padding:13px 16px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:10px}
+.phead h2{font-size:13px;font-weight:600}
+.phead .note{font-size:11.5px;color:var(--muted);margin-left:auto}
+
+/* --- chat ---------------------------------------------------------------- */
+.log{padding:16px;display:flex;flex-direction:column;gap:14px;min-height:300px}
+.turn{display:flex;gap:11px;align-items:flex-start}
+.av{width:24px;height:24px;border-radius:4px;flex:0 0 auto;display:grid;place-items:center;
+    font-size:10px;font-weight:700;font-family:var(--mono)}
+.av.u{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--rule)}
+.av.a{background:var(--brand-700);color:#fff}
+.bub{flex:1;min-width:0}
+.bub p{margin:0 0 7px}
+.bub p:last-child{margin-bottom:0}
+.ask{font-weight:600}
+.cite{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:7px;
+      padding-left:9px;border-left:2px solid var(--rule);line-height:1.6}
+.cite b{color:var(--ink-2);font-weight:500}
+.verdict{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:600;
+         letter-spacing:.05em;padding:2px 7px;border-radius:3px;margin-bottom:6px}
+.v-ok{background:var(--brand-050);color:var(--brand-700)}
+.v-ind{background:var(--warn-bg);color:var(--warn)}
+.v-block{background:var(--crit-bg);color:var(--crit)}
+.ledger{padding:0 16px 14px}
+.ledger .lg{font-family:var(--mono);font-size:11px;color:var(--muted);
+            background:var(--surface-2);border:1px solid var(--rule);border-radius:5px;padding:8px 11px}
+.ledger .lg span{color:var(--brand-700);font-weight:500}
+form.ask-form{display:flex;gap:9px;padding:13px 16px;border-top:1px solid var(--rule)}
+input[type=text]{flex:1;min-width:0;font-family:var(--sans);font-size:14px;padding:9px 12px;
+                 border:1px solid var(--rule);border-radius:6px;background:var(--surface);color:var(--ink)}
+input[type=text]:focus{outline:2px solid var(--brand-500);outline-offset:1px;border-color:var(--brand-500)}
+button{font-family:var(--sans);font-size:13.5px;font-weight:600;padding:9px 16px;border-radius:6px;
+       border:1px solid var(--brand-700);background:var(--brand-700);color:#fff;cursor:pointer}
+button:hover{background:var(--brand-500);border-color:var(--brand-500)}
+button:focus-visible{outline:2px solid var(--brand-900);outline-offset:2px}
+.seeds{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 14px}
+.seed{font-size:11.5px;padding:4px 9px;border-radius:20px;border:1px solid var(--rule);
+      background:var(--surface);color:var(--ink-2);cursor:pointer;font-family:var(--sans);font-weight:400}
+.seed:hover{border-color:var(--brand-500);color:var(--brand-700);background:var(--brand-050)}
+
+/* --- resource rail ------------------------------------------------------- */
+aside .panel + .panel{margin-top:18px}
+.links{list-style:none;margin:0;padding:7px 0}
+.links li a{display:flex;align-items:baseline;gap:8px;padding:6px 16px;text-decoration:none;color:var(--ink-2);font-size:13px}
+.links li a:hover{background:var(--brand-050);color:var(--brand-700)}
+.links .tag{font-family:var(--mono);font-size:9.5px;color:var(--muted);margin-left:auto;
+            text-transform:uppercase;letter-spacing:.06em}
+.stub{padding:9px 16px 13px;font-size:11px;color:var(--muted);line-height:1.5;border-top:1px solid var(--rule)}
+footer{border-top:1px solid var(--rule);background:var(--surface);padding:18px 0;font-size:11.5px;color:var(--muted)}
+footer .wrap{display:flex;gap:18px;flex-wrap:wrap}
+footer b{color:var(--ink-2);font-weight:600}
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <div class="mark">P</div>
+    <div>
+      <h1>Advisor Quote Desk</h1>
+      <div class="sub">Prototype · internal use only · not a client-facing surface</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="who">rep&nbsp;28841 · desk&nbsp;EQ-US</div>
+  </div>
+</header>
+
+<!-- PINNED ABOVE THE FOLD: whatever the last fetch returned, with its provenance -->
+<section class="rail" aria-label="Current quote">
+  <div class="wrap">
+    <div class="railtop">
+      <div class="sym">
+        <div class="tick" id="q-tick">NVDA</div>
+        <div class="nm" id="q-name">NVIDIA Corporation</div>
+        <div class="ids" id="q-ids"></div>
+        <form class="symsw" id="symform" autocomplete="off">
+          <label for="sym" class="sr">Load another S&amp;P 500 symbol</label>
+          <input type="text" id="sym" list="sp500" placeholder="load a symbol" maxlength="7"
+                 spellcheck="false" aria-describedby="symnote">
+          <datalist id="sp500"></datalist>
+          <button type="submit">Load</button>
+        </form>
+        <div class="symnote" id="symnote">502 S&amp;P 500 constituents resolve by ticker → name → CIK.
+          Only <b>NVDA</b> carries a seeded price slice.</div>
+      </div>
+      <div class="figs">
+        <div class="fig"><div class="k">Last</div><div class="v" id="q-last">226.040000</div></div>
+        <div class="fig"><div class="k">Prev close</div><div class="v" id="q-prev">230.360000</div></div>
+        <div class="fig"><div class="k">Change</div><div class="v dn" id="q-chg">−4.32 (−1.88%)</div></div>
+        <div class="fig">
+          <div class="k">Bid / Ask</div><div class="v na" id="q-book">not available</div>
+          <div class="why"><b>Requires the entitled feed.</b> The interim chart endpoint returns
+            no quote book at all, so bid and ask are absent — not null-because-empty. They appear
+            only once the firm's entitled Level 1 feed is connected under its Reg NMS 603(c)
+            display agreement.</div>
+        </div>
+        <div class="fig">
+          <div class="k">Spread</div><div class="v na">undefined</div>
+          <div class="why"><b>Requires the entitled feed.</b> Spread is a function of bid and ask;
+            with no book there is no mid and no spread. It is left undefined rather than derived
+            from OHLC, which would be a fabricated number carrying a real timestamp.</div>
+        </div>
+      </div>
+    </div>
+    <div class="chips" id="q-chips"></div>
+  </div>
+</section>
+
+<main class="wrap">
+  <div class="cols">
+    <section class="panel" aria-label="Ask the desk">
+      <div class="phead">
+        <h2>Ask the desk</h2>
+        <span class="note">Answers cite the row behind them, or they escalate.</span>
+      </div>
+      <div class="log" id="log"></div>
+      <div class="ledger">
+        <div class="lg" id="ledger"></div>
+      </div>
+      <div class="seeds" id="seeds"></div>
+      <form class="ask-form" id="form" autocomplete="off">
+        <label for="q" style="position:absolute;left:-9999px">Your question</label>
+        <input type="text" id="q" placeholder="e.g. what is Nvidea trading at right now?">
+        <button type="submit">Ask</button>
+      </form>
+    </section>
+
+    <aside>
+      <div class="panel">
+        <div class="phead"><h2>Book of record</h2></div>
+        <ul class="links">
+          <li><a href="#" aria-disabled="true">Orion — positions<span class="tag">T-1</span></a></li>
+          <li><a href="#" aria-disabled="true">Orion Eclipse — trading<span class="tag">stub</span></a></li>
+          <li><a href="#" aria-disabled="true">Redtail — households<span class="tag">CRM</span></a></li>
+          <li><a href="#" aria-disabled="true">Pershing NetX360 — clearing<span class="tag">stub</span></a></li>
+          <li><a href="#" aria-disabled="true">Clearing statements<span class="tag">stub</span></a></li>
+        </ul>
+        <div class="stub"><b>Stubbed pending client guidance.</b> Every link is a placeholder;
+          none of these systems is connected. Which of them are in scope, what each returns, and
+          whether Orion stays read-only are <b>client decisions</b> — the panel is built to be
+          filled in from the firm's own system inventory and entitlements, not guessed at here.</div>
+      </div>
+
+      <div class="panel">
+        <div class="phead"><h2>Supervision</h2></div>
+        <ul class="links">
+          <li><a href="#" aria-disabled="true">Written Supervisory Procedures<span class="tag">WSP</span></a></li>
+          <li><a href="#" aria-disabled="true">Rule 3110 review queue<span class="tag">stub</span></a></li>
+          <li><a href="#" aria-disabled="true">Communications archive<span class="tag">17a-4</span></a></li>
+          <li><a href="#" aria-disabled="true">Advertising review — Rule 2210<span class="tag">stub</span></a></li>
+          <li><a href="#" aria-disabled="true">Outside business activity<span class="tag">stub</span></a></li>
+          <li><a href="#" aria-disabled="true">Gifts &amp; entertainment log<span class="tag">stub</span></a></li>
+        </ul>
+        <div class="stub"><b>Stubbed pending client guidance.</b> The flag endpoints exist in the
+          schema; the rule logic is deliberately absent. <code>wsp.rule</code> ships empty with
+          <code>is_active=false</code>, so nothing fires. The firm's actual WSP text, its 3110
+          review thresholds and its escalation path are <b>client inputs</b>: a supervisory rule
+          invented by us is a compliance liability, not a feature.</div>
+      </div>
+
+      <div class="panel">
+        <div class="phead"><h2>Firm resources</h2></div>
+        <ul class="links">
+          <li><a href="#" aria-disabled="true">Advisor intranet</a></li>
+          <li><a href="#" aria-disabled="true">Product &amp; research library</a></li>
+          <li><a href="#" aria-disabled="true">Forms &amp; new accounts</a></li>
+          <li><a href="#" aria-disabled="true">Trading desk</a></li>
+          <li><a href="#" aria-disabled="true">Licensing &amp; CE (FINRA)</a></li>
+          <li><a href="#" aria-disabled="true">Service desk</a></li>
+        </ul>
+        <div class="stub"><b>Stubbed pending client guidance.</b> Destinations, SSO behaviour and
+          which resources an advisor sees by role are configuration the firm supplies. Each item
+          here is a slot, sized and placed, waiting for a real URL.</div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div><b>Source</b> yahoo_chart_v8, 15-minute delayed</div>
+    <div><b>Entitled feed</b> not connected — bid, ask and spread depend on it (sprint 2)</div>
+    <div><b>Halt status</b> unverified by this source</div>
+    <div><b>Retention</b> every turn written to ops.advisor_interaction</div>
+  </div>
+</footer>
+
+<script>
+/* ===========================================================================
+   The in-page agent. Deterministic, fixture-backed, and it refuses the same
+   things the Python agents refuse. It does not call a model and it does not
+   invent a number: every answer either cites a fixture row or escalates.
+   Fixtures mirror the seeded NVDA slice in src/data/synthetic/nvda_slice.sql.
+   =========================================================================== */
+/* --- Reference data. Ticker -> name -> CIK for the 502 S&P 500 constituents,
+   from the published index membership table. This is STATIC REFERENCE DATA, not
+   market data: a CIK does not move and needs no feed. It is what lets the desk
+   resolve any index name to an SEC identity and hand back a real EDGAR link.
+   What it deliberately does NOT contain is a price for any of them. ------- */
+const SP500=[
+["A","Agilent Technologies","0001090872","Health Care"],
+["AAPL","Apple Inc.","0000320193","Information Technology"],
+["ABBV","AbbVie","0001551152","Health Care"],
+["ABNB","Airbnb","0001559720","Consumer Discretionary"],
+["ABT","Abbott Laboratories","0000001800","Health Care"],
+["ACGL","Arch Capital Group","0000947484","Financials"],
+["ACN","Accenture","0001467373","Information Technology"],
+["ADBE","Adobe Inc.","0000796343","Information Technology"],
+["ADI","Analog Devices","0000006281","Information Technology"],
+["ADM","Archer Daniels Midland","0000007084","Consumer Staples"],
+["ADP","Automatic Data Processing","0000008670","Industrials"],
+["ADSK","Autodesk","0000769397","Information Technology"],
+["AEE","Ameren","0001002910","Utilities"],
+["AEP","American Electric Power","0000004904","Utilities"],
+["AES","AES Corporation","0000874761","Utilities"],
+["AFL","Aflac","0000004977","Financials"],
+["AIG","American International Group","0000005272","Financials"],
+["AIZ","Assurant","0001267238","Financials"],
+["AJG","Arthur J. Gallagher & Co.","0000354190","Financials"],
+["AKAM","Akamai Technologies","0001086222","Information Technology"],
+["ALB","Albemarle Corporation","0000915913","Materials"],
+["ALGN","Align Technology","0001097149","Health Care"],
+["ALL","Allstate","0000899051","Financials"],
+["ALLE","Allegion","0001579241","Industrials"],
+["AMAT","Applied Materials","0000006951","Information Technology"],
+["AMCR","Amcor","0001748790","Materials"],
+["AMD","Advanced Micro Devices","0000002488","Information Technology"],
+["AME","Ametek","0001037868","Industrials"],
+["AMGN","Amgen","0000318154","Health Care"],
+["AMP","Ameriprise Financial","0000820027","Financials"],
+["AMT","American Tower","0001053507","Real Estate"],
+["AMZN","Amazon","0001018724","Consumer Discretionary"],
+["ANET","Arista Networks","0001596532","Information Technology"],
+["AON","Aon plc","0000315293","Financials"],
+["AOS","A. O. Smith","0000091142","Industrials"],
+["APA","APA Corporation","0001841666","Energy"],
+["APD","Air Products","0000002969","Materials"],
+["APH","Amphenol","0000820313","Information Technology"],
+["APO","Apollo Global Management","0001858681","Financials"],
+["APP","AppLovin","0001751008","Communication Services"],
+["APTV","Aptiv","0001521332","Consumer Discretionary"],
+["ARE","Alexandria Real Estate Equities","0001035443","Real Estate"],
+["ARES","Ares Management","0001176948","Financials"],
+["ATO","Atmos Energy","0000731802","Utilities"],
+["AVGO","Broadcom","0001730168","Information Technology"],
+["AVY","Avery Dennison","0000008818","Materials"],
+["AWK","American Water Works","0001410636","Utilities"],
+["AXON","Axon Enterprise","0001069183","Industrials"],
+["AXP","American Express","0000004962","Financials"],
+["AZO","AutoZone","0000866787","Consumer Discretionary"],
+["BA","Boeing","0000012927","Industrials"],
+["BAC","Bank of America","0000070858","Financials"],
+["BALL","Ball Corporation","0000009389","Materials"],
+["BAX","Baxter International","0000010456","Health Care"],
+["BBY","Best Buy","0000764478","Consumer Discretionary"],
+["BDX","Becton Dickinson","0000010795","Health Care"],
+["BEN","Franklin Resources","0000038777","Financials"],
+["BF.B","Brown–Forman","0000014693","Consumer Staples"],
+["BG","Bunge Global","0001996862","Consumer Staples"],
+["BIIB","Biogen","0000875045","Health Care"],
+["BKNG","Booking Holdings","0001075531","Consumer Discretionary"],
+["BKR","Baker Hughes","0001701605","Energy"],
+["BLDR","Builders FirstSource","0001316835","Industrials"],
+["BLK","BlackRock","0002012383","Financials"],
+["BMY","Bristol Myers Squibb","0000014272","Health Care"],
+["BNY","BNY Mellon","0001390777","Financials"],
+["BR","Broadridge Financial Solutions","0001383312","Industrials"],
+["BRK.B","Berkshire Hathaway","0001067983","Financials"],
+["BRO","Brown & Brown","0000079282","Financials"],
+["BSX","Boston Scientific","0000885725","Health Care"],
+["BX","Blackstone Inc.","0001393818","Financials"],
+["BXP","BXP, Inc.","0001037540","Real Estate"],
+["C","Citigroup","0000831001","Financials"],
+["CAH","Cardinal Health","0000721371","Health Care"],
+["CARR","Carrier Global","0001783180","Industrials"],
+["CASY","Casey's","0000726958","Consumer Staples"],
+["CAT","Caterpillar Inc.","0000018230","Industrials"],
+["CB","Chubb Limited","0000896159","Financials"],
+["CBOE","Cboe Global Markets","0001374310","Financials"],
+["CBRE","CBRE Group","0001138118","Real Estate"],
+["CCI","Crown Castle","0001051470","Real Estate"],
+["CCL","Carnival Corporation","0000815097","Consumer Discretionary"],
+["CDNS","Cadence Design Systems","0000813672","Information Technology"],
+["CDW","CDW Corporation","0001402057","Information Technology"],
+["CEG","Constellation Energy","0001868275","Utilities"],
+["CF","CF Industries","0001324404","Materials"],
+["CFG","Citizens Financial Group","0000759944","Financials"],
+["CHD","Church & Dwight","0000313927","Consumer Staples"],
+["CHRW","C.H. Robinson","0001043277","Industrials"],
+["CHTR","Charter Communications","0001091667","Communication Services"],
+["CI","Cigna","0001739940","Health Care"],
+["CIEN","Ciena","0000936395","Information Technology"],
+["CINF","Cincinnati Financial","0000020286","Financials"],
+["CL","Colgate-Palmolive","0000021665","Consumer Staples"],
+["CLX","Clorox","0000021076","Consumer Staples"],
+["CMCSA","Comcast","0001166691","Communication Services"],
+["CME","CME Group","0001156375","Financials"],
+["CMG","Chipotle Mexican Grill","0001058090","Consumer Discretionary"],
+["CMI","Cummins","0000026172","Industrials"],
+["CMS","CMS Energy","0000811156","Utilities"],
+["CNC","Centene Corporation","0001071739","Health Care"],
+["CNP","CenterPoint Energy","0001130310","Utilities"],
+["COF","Capital One","0000927628","Financials"],
+["COHR","Coherent Corp.","0000820318","Information Technology"],
+["COIN","Coinbase","0001679788","Financials"],
+["COO","Cooper Companies (The)","0000711404","Health Care"],
+["COP","ConocoPhillips","0001163165","Energy"],
+["COR","Cencora","0001140859","Health Care"],
+["COST","Costco","0000909832","Consumer Staples"],
+["CPAY","Corpay","0001175454","Financials"],
+["CPRT","Copart","0000900075","Industrials"],
+["CPT","Camden Property Trust","0000906345","Real Estate"],
+["CRH","CRH plc","0000849395","Materials"],
+["CRL","Charles River Laboratories","0001100682","Health Care"],
+["CRM","Salesforce","0001108524","Information Technology"],
+["CRWD","CrowdStrike","0001535527","Information Technology"],
+["CSCO","Cisco","0000858877","Information Technology"],
+["CSGP","CoStar Group","0001057352","Real Estate"],
+["CSX","CSX Corporation","0000277948","Industrials"],
+["CTAS","Cintas","0000723254","Industrials"],
+["CTSH","Cognizant","0001058290","Information Technology"],
+["CTVA","Corteva","0001755672","Materials"],
+["CVNA","Carvana","0001690820","Consumer Discretionary"],
+["CVS","CVS Health","0000064803","Health Care"],
+["CVX","Chevron Corporation","0000093410","Energy"],
+["D","Dominion Energy","0000715957","Utilities"],
+["DAL","Delta Air Lines","0000027904","Industrials"],
+["DASH","DoorDash","0001792789","Consumer Discretionary"],
+["DD","DuPont","0001666700","Industrials"],
+["DDOG","Datadog","0001561550","Information Technology"],
+["DE","Deere & Company","0000315189","Industrials"],
+["DECK","Deckers Brands","0000910521","Consumer Discretionary"],
+["DELL","Dell Technologies","0001571996","Information Technology"],
+["DG","Dollar General","0000029534","Consumer Staples"],
+["DGX","Quest Diagnostics","0001022079","Health Care"],
+["DHI","D. R. Horton","0000882184","Consumer Discretionary"],
+["DHR","Danaher Corporation","0000313616","Health Care"],
+["DIS","Walt Disney Company (The)","0001744489","Communication Services"],
+["DLR","Digital Realty","0001297996","Real Estate"],
+["DLTR","Dollar Tree","0000935703","Consumer Staples"],
+["DOC","Healthpeak Properties","0000765880","Real Estate"],
+["DOV","Dover Corporation","0000029905","Industrials"],
+["DOW","Dow Inc.","0001751788","Materials"],
+["DPZ","Domino's","0001286681","Consumer Discretionary"],
+["DRI","Darden Restaurants","0000940944","Consumer Discretionary"],
+["DTE","DTE Energy","0000936340","Utilities"],
+["DUK","Duke Energy","0001326160","Utilities"],
+["DVA","DaVita","0000927066","Health Care"],
+["DVN","Devon Energy","0001090012","Energy"],
+["DXCM","Dexcom","0001093557","Health Care"],
+["EBAY","eBay Inc.","0001065088","Consumer Discretionary"],
+["ECHO","EchoStar","0001415404","Communication Services"],
+["ECL","Ecolab","0000031462","Materials"],
+["ED","Consolidated Edison","0001047862","Utilities"],
+["EFX","Equifax","0000033185","Industrials"],
+["EG","Everest Group","0001095073","Financials"],
+["EIX","Edison International","0000827052","Utilities"],
+["EL","Estée Lauder Companies (The)","0001001250","Consumer Staples"],
+["ELV","Elevance Health","0001156039","Health Care"],
+["EME","Emcor","0000105634","Industrials"],
+["EMR","Emerson Electric","0000032604","Industrials"],
+["EOG","EOG Resources","0000821189","Energy"],
+["EQIX","Equinix","0001101239","Real Estate"],
+["EQT","EQT Corporation","0000033213","Energy"],
+["ERIE","Erie Indemnity","0000922621","Financials"],
+["ES","Eversource Energy","0000072741","Utilities"],
+["ESS","Essex Property Trust","0000920522","Real Estate"],
+["ETN","Eaton Corporation","0001551182","Industrials"],
+["ETR","Entergy","0000065984","Utilities"],
+["EVRG","Evergy","0001711269","Utilities"],
+["EW","Edwards Lifesciences","0001099800","Health Care"],
+["EXC","Exelon","0001109357","Utilities"],
+["EXE","Expand Energy","0000895126","Energy"],
+["EXPD","Expeditors International","0000746515","Industrials"],
+["EXPE","Expedia Group","0001324424","Consumer Discretionary"],
+["EXR","Extra Space Storage","0001289490","Real Estate"],
+["F","Ford Motor Company","0000037996","Consumer Discretionary"],
+["FANG","Diamondback Energy","0001539838","Energy"],
+["FAST","Fastenal","0000815556","Industrials"],
+["FCX","Freeport-McMoRan","0000831259","Materials"],
+["FDS","FactSet","0001013237","Financials"],
+["FDX","FedEx","0001048911","Industrials"],
+["FDXF","FedEx Freight","0002082247","Industrials"],
+["FE","FirstEnergy","0001031296","Utilities"],
+["FERG","Ferguson Enterprises","0002011641","Industrials"],
+["FFIV","F5, Inc.","0001048695","Information Technology"],
+["FICO","Fair Isaac","0000814547","Information Technology"],
+["FIS","Fidelity National Information Services","0001136893","Financials"],
+["FISV","Fiserv","0000798354","Financials"],
+["FITB","Fifth Third Bancorp","0000035527","Financials"],
+["FIX","Comfort Systems USA","0001035983","Industrials"],
+["FLEX","Flex Ltd.","0000866374","Information Technology"],
+["FOX","Fox Corporation (Class B)","0001754301","Communication Services"],
+["FOXA","Fox Corporation (Class A)","0001754301","Communication Services"],
+["FRT","Federal Realty Investment Trust","0000034903","Real Estate"],
+["FSLR","First Solar","0001274494","Information Technology"],
+["FTNT","Fortinet","0001262039","Information Technology"],
+["FTV","Fortive","0001659166","Industrials"],
+["GD","General Dynamics","0000040533","Industrials"],
+["GDDY","GoDaddy","0001609711","Information Technology"],
+["GE","GE Aerospace","0000040545","Industrials"],
+["GEHC","GE HealthCare","0001932393","Health Care"],
+["GEN","Gen Digital","0000849399","Information Technology"],
+["GEV","GE Vernova","0001996810","Industrials"],
+["GILD","Gilead Sciences","0000882095","Health Care"],
+["GIS","General Mills","0000040704","Consumer Staples"],
+["GL","Globe Life","0000320335","Financials"],
+["GLW","Corning Inc.","0000024741","Information Technology"],
+["GM","General Motors","0001467858","Consumer Discretionary"],
+["GNRC","Generac","0001474735","Industrials"],
+["GOOG","Alphabet Inc. (Class C)","0001652044","Communication Services"],
+["GOOGL","Alphabet Inc. (Class A)","0001652044","Communication Services"],
+["GPC","Genuine Parts Company","0000040987","Consumer Discretionary"],
+["GPN","Global Payments","0001123360","Financials"],
+["GRMN","Garmin","0001121788","Consumer Discretionary"],
+["GS","Goldman Sachs","0000886982","Financials"],
+["GWW","W. W. Grainger","0000277135","Industrials"],
+["HAL","Halliburton","0000045012","Energy"],
+["HAS","Hasbro","0000046080","Consumer Discretionary"],
+["HBAN","Huntington Bancshares","0000049196","Financials"],
+["HCA","HCA Healthcare","0000860730","Health Care"],
+["HD","Home Depot (The)","0000354950","Consumer Discretionary"],
+["HIG","Hartford (The)","0000874766","Financials"],
+["HII","Huntington Ingalls Industries","0001501585","Industrials"],
+["HLT","Hilton Worldwide","0001585689","Consumer Discretionary"],
+["HON","Honeywell Technologies","0000773840","Industrials"],
+["HONA","Honeywell Aerospace","0002089271","Industrials"],
+["HOOD","Robinhood Markets","0001783879","Financials"],
+["HPE","Hewlett Packard Enterprise","0001645590","Information Technology"],
+["HPQ","HP Inc.","0000047217","Information Technology"],
+["HRL","Hormel Foods","0000048465","Consumer Staples"],
+["HSIC","Henry Schein","0001000228","Health Care"],
+["HST","Host Hotels & Resorts","0001070750","Real Estate"],
+["HSY","Hershey Company (The)","0000047111","Consumer Staples"],
+["HUBB","Hubbell Incorporated","0000048898","Industrials"],
+["HUM","Humana","0000049071","Health Care"],
+["HWM","Howmet Aerospace","0000004281","Industrials"],
+["IBKR","Interactive Brokers","0001381197","Financials"],
+["IBM","IBM","0000051143","Information Technology"],
+["ICE","Intercontinental Exchange","0001571949","Financials"],
+["IDXX","Idexx Laboratories","0000874716","Health Care"],
+["IEX","IDEX Corporation","0000832101","Industrials"],
+["IFF","International Flavors & Fragrances","0000051253","Materials"],
+["INCY","Incyte","0000879169","Health Care"],
+["INTC","Intel","0000050863","Information Technology"],
+["INTU","Intuit","0000896878","Information Technology"],
+["INVH","Invitation Homes","0001687229","Real Estate"],
+["IP","International Paper","0000051434","Materials"],
+["IQV","IQVIA","0001478242","Health Care"],
+["IR","Ingersoll Rand","0001699150","Industrials"],
+["IRM","Iron Mountain","0001020569","Real Estate"],
+["ISRG","Intuitive Surgical","0001035267","Health Care"],
+["IT","Gartner","0000749251","Information Technology"],
+["ITW","Illinois Tool Works","0000049826","Industrials"],
+["IVZ","Invesco","0000914208","Financials"],
+["J","Jacobs Solutions","0000052988","Industrials"],
+["JBHT","J.B. Hunt","0000728535","Industrials"],
+["JBL","Jabil","0000898293","Information Technology"],
+["JCI","Johnson Controls","0000833444","Industrials"],
+["JKHY","Jack Henry & Associates","0000779152","Financials"],
+["JNJ","Johnson & Johnson","0000200406","Health Care"],
+["JPM","JPMorgan Chase","0000019617","Financials"],
+["KDP","Keurig Dr Pepper","0001418135","Consumer Staples"],
+["KEY","KeyCorp","0000091576","Financials"],
+["KEYS","Keysight Technologies","0001601046","Information Technology"],
+["KHC","Kraft Heinz","0001637459","Consumer Staples"],
+["KIM","Kimco Realty","0000879101","Real Estate"],
+["KKR","KKR & Co.","0001404912","Financials"],
+["KLAC","KLA Corporation","0000319201","Information Technology"],
+["KMB","Kimberly-Clark","0000055785","Consumer Staples"],
+["KMI","Kinder Morgan","0001506307","Energy"],
+["KO","Coca-Cola Company (The)","0000021344","Consumer Staples"],
+["KR","Kroger","0000056873","Consumer Staples"],
+["KVUE","Kenvue","0001944048","Consumer Staples"],
+["L","Loews Corporation","0000060086","Financials"],
+["LDOS","Leidos","0001336920","Industrials"],
+["LEN","Lennar","0000920760","Consumer Discretionary"],
+["LH","Labcorp","0000920148","Health Care"],
+["LHX","L3Harris","0000202058","Industrials"],
+["LII","Lennox International","0001069202","Industrials"],
+["LIN","Linde plc","0001707925","Materials"],
+["LITE","Lumentum","0001633978","Information Technology"],
+["LLY","Lilly (Eli)","0000059478","Health Care"],
+["LMT","Lockheed Martin","0000936468","Industrials"],
+["LNT","Alliant Energy","0000352541","Utilities"],
+["LOW","Lowe's","0000060667","Consumer Discretionary"],
+["LRCX","Lam Research","0000707549","Information Technology"],
+["LULU","Lululemon Athletica","0001397187","Consumer Discretionary"],
+["LUV","Southwest Airlines","0000092380","Industrials"],
+["LVS","Las Vegas Sands","0001300514","Consumer Discretionary"],
+["LYB","LyondellBasell","0001489393","Materials"],
+["LYV","Live Nation Entertainment","0001335258","Communication Services"],
+["MA","Mastercard","0001141391","Financials"],
+["MAA","Mid-America Apartment Communities","0000912595","Real Estate"],
+["MAR","Marriott International","0001048286","Consumer Discretionary"],
+["MAS","Masco","0000062996","Industrials"],
+["MCD","McDonald's","0000063908","Consumer Discretionary"],
+["MCHP","Microchip Technology","0000827054","Information Technology"],
+["MCK","McKesson Corporation","0000927653","Health Care"],
+["MCO","Moody's Corporation","0001059556","Financials"],
+["MDLZ","Mondelez International","0001103982","Consumer Staples"],
+["MDT","Medtronic","0001613103","Health Care"],
+["MET","MetLife","0001099219","Financials"],
+["META","Meta Platforms","0001326801","Communication Services"],
+["MGM","MGM Resorts","0000789570","Consumer Discretionary"],
+["MKC","McCormick & Company","0000063754","Consumer Staples"],
+["MLM","Martin Marietta Materials","0000916076","Materials"],
+["MMM","3M","0000066740","Industrials"],
+["MNST","Monster Beverage","0000865752","Consumer Staples"],
+["MO","Altria","0000764180","Consumer Staples"],
+["MOS","Mosaic Company (The)","0001285785","Materials"],
+["MPC","Marathon Petroleum","0001510295","Energy"],
+["MPWR","Monolithic Power Systems","0001280452","Information Technology"],
+["MRK","Merck & Co.","0000310158","Health Care"],
+["MRNA","Moderna","0001682852","Health Care"],
+["MRSH","Marsh McLennan","0000062709","Financials"],
+["MRVL","Marvell Technology","0001835632","Information Technology"],
+["MS","Morgan Stanley","0000895421","Financials"],
+["MSCI","MSCI","0001408198","Financials"],
+["MSFT","Microsoft","0000789019","Information Technology"],
+["MSI","Motorola Solutions","0000068505","Information Technology"],
+["MTB","M&T Bank","0000036270","Financials"],
+["MTD","Mettler Toledo","0001037646","Health Care"],
+["MU","Micron Technology","0000723125","Information Technology"],
+["NCLH","Norwegian Cruise Line Holdings","0001513761","Consumer Discretionary"],
+["NDAQ","Nasdaq, Inc.","0001120193","Financials"],
+["NDSN","Nordson Corporation","0000072331","Industrials"],
+["NEE","NextEra Energy","0000753308","Utilities"],
+["NEM","Newmont","0001164727","Materials"],
+["NFLX","Netflix","0001065280","Communication Services"],
+["NI","NiSource","0001111711","Utilities"],
+["NKE","Nike, Inc.","0000320187","Consumer Discretionary"],
+["NOC","Northrop Grumman","0001133421","Industrials"],
+["NOW","ServiceNow","0001373715","Information Technology"],
+["NRG","NRG Energy","0001013871","Utilities"],
+["NSC","Norfolk Southern","0000702165","Industrials"],
+["NTAP","NetApp","0001002047","Information Technology"],
+["NTRS","Northern Trust","0000073124","Financials"],
+["NUE","Nucor","0000073309","Materials"],
+["NVDA","Nvidia","0001045810","Information Technology"],
+["NVR","NVR, Inc.","0000906163","Consumer Discretionary"],
+["NWS","News Corp (Class B)","0001564708","Communication Services"],
+["NWSA","News Corp (Class A)","0001564708","Communication Services"],
+["NXPI","NXP Semiconductors","0001413447","Information Technology"],
+["O","Realty Income","0000726728","Real Estate"],
+["ODFL","Old Dominion","0000878927","Industrials"],
+["OKE","Oneok","0001039684","Energy"],
+["OMC","Omnicom Group","0000029989","Communication Services"],
+["ON","ON Semiconductor","0001097864","Information Technology"],
+["ORCL","Oracle Corporation","0001341439","Information Technology"],
+["ORLY","O'Reilly Automotive","0000898173","Consumer Discretionary"],
+["OTIS","Otis Worldwide","0001781335","Industrials"],
+["OXY","Occidental Petroleum","0000797468","Energy"],
+["PANW","Palo Alto Networks","0001327567","Information Technology"],
+["PAYX","Paychex","0000723531","Industrials"],
+["PCAR","Paccar","0000075362","Industrials"],
+["PCG","PG&E Corporation","0001004980","Utilities"],
+["PEG","Public Service Enterprise Group","0000788784","Utilities"],
+["PEP","PepsiCo","0000077476","Consumer Staples"],
+["PFE","Pfizer","0000078003","Health Care"],
+["PFG","Principal Financial Group","0001126328","Financials"],
+["PG","Procter & Gamble","0000080424","Consumer Staples"],
+["PGR","Progressive Corporation","0000080661","Financials"],
+["PH","Parker Hannifin","0000076334","Industrials"],
+["PHM","PulteGroup","0000822416","Consumer Discretionary"],
+["PKG","Packaging Corporation of America","0000075677","Materials"],
+["PLD","Prologis","0001045609","Real Estate"],
+["PLTR","Palantir Technologies","0001321655","Information Technology"],
+["PM","Philip Morris International","0001413329","Consumer Staples"],
+["PNC","PNC Financial Services","0000713676","Financials"],
+["PNR","Pentair","0000077360","Industrials"],
+["PNW","Pinnacle West Capital","0000764622","Utilities"],
+["PODD","Insulet Corporation","0001145197","Health Care"],
+["PPG","PPG Industries","0000079879","Materials"],
+["PPL","PPL Corporation","0000922224","Utilities"],
+["PRU","Prudential Financial","0001137774","Financials"],
+["PSA","Public Storage","0001393311","Real Estate"],
+["PSKY","Paramount Skydance Corporation","0002041610","Communication Services"],
+["PSX","Phillips 66","0001534701","Energy"],
+["PTC","PTC Inc.","0000857005","Information Technology"],
+["PWR","Quanta Services","0001050915","Industrials"],
+["PYPL","PayPal","0001633917","Financials"],
+["Q","Qnity Electronics","0002058873","Information Technology"],
+["QCOM","Qualcomm","0000804328","Information Technology"],
+["RCL","Royal Caribbean Group","0000884887","Consumer Discretionary"],
+["RDDT","Reddit","0001713445","Communication Services"],
+["REG","Regency Centers","0000910606","Real Estate"],
+["REGN","Regeneron Pharmaceuticals","0000872589","Health Care"],
+["RF","Regions Financial Corporation","0001281761","Financials"],
+["RJF","Raymond James Financial","0000720005","Financials"],
+["RL","Ralph Lauren Corporation","0001037038","Consumer Discretionary"],
+["ROK","Rockwell Automation","0001024478","Industrials"],
+["ROL","Rollins, Inc.","0000084839","Industrials"],
+["ROP","Roper Technologies","0000882835","Information Technology"],
+["ROST","Ross Stores","0000745732","Consumer Discretionary"],
+["RSG","Republic Services","0001060391","Industrials"],
+["RTX","RTX Corporation","0000101829","Industrials"],
+["RVTY","Revvity","0000031791","Health Care"],
+["SBAC","SBA Communications","0001034054","Real Estate"],
+["SBUX","Starbucks","0000829224","Consumer Discretionary"],
+["SCHW","Charles Schwab Corporation","0000316709","Financials"],
+["SHW","Sherwin-Williams","0000089800","Materials"],
+["SJM","J.M. Smucker Company (The)","0000091419","Consumer Staples"],
+["SLB","Schlumberger","0000087347","Energy"],
+["SMCI","Supermicro","0001375365","Information Technology"],
+["SNA","Snap-on","0000091440","Industrials"],
+["SNDK","Sandisk","0002023554","Information Technology"],
+["SNPS","Synopsys","0000883241","Information Technology"],
+["SO","Southern Company","0000092122","Utilities"],
+["SOLV","Solventum","0001964738","Health Care"],
+["SPG","Simon Property Group","0001063761","Real Estate"],
+["SPGI","S&P Global","0000064040","Financials"],
+["SRE","Sempra","0001032208","Utilities"],
+["STE","Steris","0001757898","Health Care"],
+["STLD","Steel Dynamics","0001022671","Materials"],
+["STT","State Street Corporation","0000093751","Financials"],
+["STX","Seagate Technology","0001137789","Information Technology"],
+["STZ","Constellation Brands","0000016918","Consumer Staples"],
+["SW","Smurfit Westrock","0002005951","Materials"],
+["SWK","Stanley Black & Decker","0000093556","Industrials"],
+["SWKS","Skyworks Solutions","0000004127","Information Technology"],
+["SYF","Synchrony Financial","0001601712","Financials"],
+["SYK","Stryker Corporation","0000310764","Health Care"],
+["SYY","Sysco","0000096021","Consumer Staples"],
+["T","AT&T","0000732717","Communication Services"],
+["TAP","Molson Coors Beverage Company","0000024545","Consumer Staples"],
+["TDG","TransDigm Group","0001260221","Industrials"],
+["TDY","Teledyne Technologies","0001094285","Information Technology"],
+["TECH","Bio-Techne","0000842023","Health Care"],
+["TEL","TE Connectivity","0001385157","Information Technology"],
+["TER","Teradyne","0000097210","Information Technology"],
+["TFC","Truist Financial","0000092230","Financials"],
+["TGT","Target Corporation","0000027419","Consumer Staples"],
+["TJX","TJX Companies","0000109198","Consumer Discretionary"],
+["TKO","TKO Group Holdings","0001973266","Communication Services"],
+["TMO","Thermo Fisher Scientific","0000097745","Health Care"],
+["TMUS","T-Mobile US","0001283699","Communication Services"],
+["TPL","Texas Pacific Land Corporation","0001811074","Energy"],
+["TPR","Tapestry, Inc.","0001116132","Consumer Discretionary"],
+["TRGP","Targa Resources","0001389170","Energy"],
+["TRMB","Trimble Inc.","0000864749","Information Technology"],
+["TROW","T. Rowe Price","0001113169","Financials"],
+["TRV","Travelers Companies (The)","0000086312","Financials"],
+["TSCO","Tractor Supply","0000916365","Consumer Discretionary"],
+["TSLA","Tesla, Inc.","0001318605","Consumer Discretionary"],
+["TSN","Tyson Foods","0000100493","Consumer Staples"],
+["TT","Trane Technologies","0001466258","Industrials"],
+["TTD","Trade Desk (The)","0001671933","Communication Services"],
+["TTWO","Take-Two Interactive","0000946581","Communication Services"],
+["TXN","Texas Instruments","0000097476","Information Technology"],
+["TXT","Textron","0000217346","Industrials"],
+["TYL","Tyler Technologies","0000860731","Information Technology"],
+["UAL","United Airlines Holdings","0000100517","Industrials"],
+["UBER","Uber","0001543151","Industrials"],
+["UDR","UDR, Inc.","0000074208","Real Estate"],
+["UHS","Universal Health Services","0000352915","Health Care"],
+["ULTA","Ulta Beauty","0001403568","Consumer Discretionary"],
+["UNH","UnitedHealth Group","0000731766","Health Care"],
+["UNP","Union Pacific Corporation","0000100885","Industrials"],
+["UPS","United Parcel Service","0001090727","Industrials"],
+["URI","United Rentals","0001067701","Industrials"],
+["USB","U.S. Bancorp","0000036104","Financials"],
+["V","Visa Inc.","0001403161","Financials"],
+["VEEV","Veeva Systems","0001393052","Health Care"],
+["VICI","Vici Properties","0001705696","Real Estate"],
+["VLO","Valero Energy","0001035002","Energy"],
+["VLTO","Veralto","0001967680","Industrials"],
+["VMC","Vulcan Materials Company","0001396009","Materials"],
+["VMRK","Vivmark Residential","0000906107","Real Estate"],
+["VRSK","Verisk Analytics","0001442145","Industrials"],
+["VRSN","Verisign","0001014473","Information Technology"],
+["VRT","Vertiv","0001674101","Industrials"],
+["VRTX","Vertex Pharmaceuticals","0000875320","Health Care"],
+["VST","Vistra Corp.","0001692819","Utilities"],
+["VTR","Ventas","0000740260","Real Estate"],
+["VTRS","Viatris","0001792044","Health Care"],
+["VZ","Verizon","0000732712","Communication Services"],
+["WAB","Wabtec","0000943452","Industrials"],
+["WAT","Waters Corporation","0001000697","Health Care"],
+["WBD","Warner Bros. Discovery","0001437107","Communication Services"],
+["WDAY","Workday, Inc.","0001327811","Information Technology"],
+["WDC","Western Digital","0000106040","Information Technology"],
+["WEC","WEC Energy Group","0000783325","Utilities"],
+["WELL","Welltower","0000766704","Real Estate"],
+["WFC","Wells Fargo","0000072971","Financials"],
+["WM","Waste Management","0000823768","Industrials"],
+["WMB","Williams Companies","0000107263","Energy"],
+["WMT","Walmart","0000104169","Consumer Staples"],
+["WRB","W. R. Berkley Corporation","0000011544","Financials"],
+["WSM","Williams-Sonoma, Inc.","0000719955","Consumer Discretionary"],
+["WST","West Pharmaceutical Services","0000105770","Health Care"],
+["WTW","Willis Towers Watson","0001140536","Financials"],
+["WY","Weyerhaeuser","0000106535","Real Estate"],
+["WYNN","Wynn Resorts","0001174922","Consumer Discretionary"],
+["XEL","Xcel Energy","0000072903","Utilities"],
+["XOM","ExxonMobil","0002115436","Energy"],
+["XYL","Xylem Inc.","0001524472","Industrials"],
+["XYZ","Block, Inc.","0001512673","Financials"],
+["YUM","Yum! Brands","0001041061","Consumer Discretionary"],
+["ZBH","Zimmer Biomet","0001136869","Health Care"],
+["ZBRA","Zebra Technologies","0000877212","Information Technology"],
+["ZTS","Zoetis","0001555280","Health Care"],
+];
+const SP_BY_TICKER = Object.fromEntries(SP500.map(r => [r[0], {ticker:r[0], name:r[1], cik:r[2], sector:r[3]}]));
+// The seeded slice carries the legal name from core.entity; the index table
+// carries the index's short name. core.entity wins for the one issuer we hold.
+SP_BY_TICKER["NVDA"].name = "NVIDIA Corporation";
+
+/* --- The seeded slice. One security, because a price is not reference data.
+   Mirrors src/data/synthetic/nvda_slice.sql. ----------------------------- */
+const QUOTE = {
+  figi:"BBG000BBJQV0", ticker:"NVDA", name:"NVIDIA Corporation", cik:"0001045810",
+  mic:"XNGS", last:"226.040000", prev_close:"230.360000", currency:"USD",
+  bid:null, ask:null, source:"yahoo_chart_v8", delay_seconds:900,
+  as_of_at_utc:"2026-09-08T17:30:00Z", session:"regular", halt_verified:false,
+  price_basis:"adjusted", cite:"md.v_security_price#BBG000BBJQV0"
+};
+const POSITION = { account:"ORI-4471", household:"Wilson Family Trust", qty:1200,
+                   close_price:"230.360000", as_of_date:"2026-09-05", source:"orion",
+                   cite:"pos.position_snapshot#8812" };
+const FILINGS = [
+  {form:"4",        filed:"2026-09-08T16:31:02Z", acc:"0001045810-26-000110", what:"Section 16 insider transaction"},
+  {form:"SC 13G/A", filed:"2026-09-04T18:02:00Z", acc:"0001045810-26-000109", what:"Beneficial ownership amendment"},
+  {form:"13F-HR",   filed:"2026-08-14T15:00:00Z", acc:"0001045810-26-000101", what:"Institutional holdings, quarterly"}
+];
+const SYNONYMS = [
+  ["nvidiacorporation","legal_name",1.000],["nvidiacorp","short_name",0.990],
+  ["nvidia","short_name",0.980],["nvda","ticker",0.990],["nasdaqnvda","exchange_qualified_ticker",0.990],
+  ["nvidea","misspelling",0.750],["nvida","misspelling",0.750],["nvdia","misspelling",0.720],
+  ["nivida","misspelling",0.700],["nividia","misspelling",0.700],["invidia","misspelling",0.650],
+  ["nvidiacorportation","misspelling",0.700],["nvd","misspelling",0.400],["envidia","phonetic",0.550]
+];
+
+/* --- The active security. NVDA on load; any index constituent on request. */
+let ACTIVE = {...SP_BY_TICKER["NVDA"], seeded:true};
+
+const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g,"");
+const ET = t => new Date(t).toLocaleString("en-US",{timeZone:"America/New_York",
+             month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) + " ET";
+
+/* Money is numeric(20,6) end to end, so the page does its arithmetic in whole
+   micro-units and never in floating point. 226.04 - 230.36 is exact here; in
+   IEEE-754 it is 4.3199999999999932, and a desk that rounds that for display is
+   a desk that will one day round something that matters. */
+const micro = s => Math.round(parseFloat(s) * 1e6);
+const fmt2  = m => (m/1e6).toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtUSD= m => "$" + fmt2(m);
+
+function move(q){
+  if (!q || q.last == null || q.prev_close == null) return null;
+  const last = micro(q.last), prev = micro(q.prev_close);
+  const abs = last - prev;
+  const pct = prev === 0 ? null : (abs / prev) * 100;
+  return {abs, pct, last, prev,
+          dir: abs < 0 ? "down" : abs > 0 ? "up" : "flat",
+          absTxt: (abs < 0 ? "\u2212" : abs > 0 ? "+" : "") + fmt2(Math.abs(abs)),
+          pctTxt: pct === null ? "n/a" : (abs < 0 ? "\u2212" : abs > 0 ? "+" : "") + Math.abs(pct).toFixed(2) + "%"};
+}
+
+/* EDGAR deep links. The CIK is the canonical identifier in this system
+   (ADR-0012), so it is also the thing that has to be clickable: an advisor who
+   is told "CIK 0001045810" and cannot reach the filing has been given a string,
+   not a citation. */
+const edgarIssuer = cik =>
+  `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=&dateb=&owner=exclude&count=40`;
+const edgarFiling = (cik, acc) =>
+  `https://www.sec.gov/Archives/edgar/data/${parseInt(cik,10)}/${acc.replace(/-/g,"")}/${acc}-index.htm`;
+
+let calls = 3, CAP = 500;
+
+/* --- Rail ---------------------------------------------------------------- */
+function renderRail(){
+  const seeded = ACTIVE.seeded, q = seeded ? QUOTE : null, m = move(q);
+  document.getElementById("q-tick").textContent = ACTIVE.ticker;
+  document.getElementById("q-name").textContent = ACTIVE.name;
+  document.getElementById("q-ids").innerHTML =
+    `CIK <a href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer"
+        title="Open this issuer's filings on EDGAR">${ACTIVE.cik}</a>` +
+    (seeded ? ` \u00b7 FIGI ${QUOTE.figi} \u00b7 ${QUOTE.mic}` : ` \u00b7 ${ACTIVE.sector}`);
+
+  const set = (id, v, cls) => { const e = document.getElementById(id);
+    e.textContent = v; e.className = "v" + (cls ? " " + cls : ""); };
+  if (seeded){
+    set("q-last", q.last); set("q-prev", q.prev_close);
+    set("q-chg", `${m.absTxt} (${m.pctTxt})`, m.dir === "down" ? "dn" : m.dir === "up" ? "up" : "");
+  } else {
+    set("q-last", "not fetched", "na"); set("q-prev", "not fetched", "na");
+    set("q-chg", "not computed", "na");
+  }
+  document.getElementById("q-book").textContent = "not available";
+
+  document.getElementById("q-chips").innerHTML = seeded ? `
+    <span class="chip ok">session regular \u00b7 NYSE</span>
+    <span class="chip warn">delayed 900s</span>
+    <span class="chip warn">halt unverified</span>
+    <span class="chip">basis adjusted</span>
+    <span class="chip">as of ${ET(q.as_of_at_utc)}</span>
+    <span class="chip">verified by 2nd read \u00b7 \u0394 0.00%</span>
+    <span class="chip crit">no quote book \u2014 entitled feed required</span>` : `
+    <span class="chip ok">entity resolved \u00b7 CIK ${ACTIVE.cik}</span>
+    <span class="chip">${ACTIVE.sector}</span>
+    <span class="chip crit">no price slice seeded for ${ACTIVE.ticker}</span>
+    <span class="chip crit">no entitled feed connected</span>
+    <span class="chip">EDGAR link live</span>`;
+}
+
+/* --- Entity resolution --------------------------------------------------- */
+/* Thirteen S&P 500 tickers are also ordinary English words. Matching a bare
+   lowercase one turns "Why is it down today?" into a question about Gartner (IT)
+   and "what is that worth right now?" into ServiceNow (NOW). Caught by a headless
+   run of this page, not by reading it. A lowercase homograph is only a ticker
+   when the advisor typed it as one; uppercase or $-prefixed always counts. */
+const HOMOGRAPHS = new Set(["A","ALL","ARE","COST","FIX","HAS","IT","KEY","LOW","NOW","ON","SO","WELL"]);
+
+function resolve(text){
+  const raw = text.split(/[^A-Za-z0-9$.\-]+/).filter(Boolean);
+  const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  // 1. An exact index ticker anywhere in the question wins outright.
+  for (const w of raw){
+    const bare = w.replace(/^\$/, "");
+    const t = bare.toUpperCase();
+    if (!SP_BY_TICKER[t]) continue;
+    const typedAsTicker = w.startsWith("$") || bare === t;   // "$IT" or "IT", not "it"
+    if (HOMOGRAPHS.has(t) && !typedAsTicker) continue;
+    return {matched:t, kind:"ticker", conf:0.990, sp:SP_BY_TICKER[t]};
+  }
+  // 2. Otherwise the seeded synonym table, longest phrase first.
+  for (let n = 3; n >= 1; n--){
+    for (let i = 0; i + n <= words.length; i++){
+      const k = norm(words.slice(i, i+n).join(""));
+      const hit = SYNONYMS.find(s => s[0] === k);
+      if (hit) return {matched: words.slice(i, i+n).join(" "), kind: hit[1], conf: hit[2],
+                       sp: SP_BY_TICKER["NVDA"]};
+    }
+  }
+  // 3. An index constituent named in full ("Advanced Micro Devices").
+  const flat = norm(text);
+  const byName = SP500.find(r => r[1].length > 4 && flat.includes(norm(r[1])));
+  if (byName) return {matched: byName[1], kind:"legal_name", conf:0.950, sp: SP_BY_TICKER[byName[0]]};
+  return null;
+}
+
+/* One intent per question. Order matters: the refusals are checked before the
+   answers, so a request that must be blocked cannot fall through to a price. */
+function classify(t){
+  const s = t.toLowerCase();
+  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
+  if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
+  if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
+  if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
+  if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
+  if (/\b(filings?|filed|8-?k|10-?[kq]|13[dfghq]|insiders?|form ?[345]|sec|edgar|ownership|accession)\b/.test(s)) return "filings";
+  if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(s)) return "news";
+  if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s))   return "price";
+  return "unknown";
+}
+
+const el = (h) => { const d = document.createElement("div"); d.innerHTML = h; return d.firstElementChild; };
+
+function say(role, html){
+  const t = el(`<div class="turn"><div class="av ${role==="u"?"u":"a"}">${role==="u"?"YOU":"DSK"}</div><div class="bub">${html}</div></div>`);
+  document.getElementById("log").appendChild(t);
+  t.scrollIntoView({block:"nearest", behavior:"smooth"});
+}
+
+/* Referential binding. The rail is the subject of the conversation: whatever
+   CIK is pinned above the fold is the entity every answer is about, and every
+   answer says so with the CIK as a live EDGAR link. An advisor should never have
+   to infer which company the desk just answered for. */
+function subject(){
+  return `<div class="subj"><b>${ACTIVE.ticker}</b> \u00b7 ${ACTIVE.name} \u00b7 CIK
+    <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a>
+    <span class="subj-n">\u2014 the symbol pinned above the fold</span></div>`;
+}
+
+function provenance(extra){
+  return `<div class="cite"><b>source</b> ${QUOTE.source} \u00b7 <b>delayed</b> ${QUOTE.delay_seconds}s \u00b7
+    <b>as of</b> ${ET(QUOTE.as_of_at_utc)} \u00b7 <b>basis</b> ${QUOTE.price_basis} \u00b7
+    <b>halt</b> unverified<br><b>cite</b> ${QUOTE.cite}${extra ? "<br>" + extra : ""}</div>`;
+}
+
+/* Every data answer is written against the ACTIVE security, so it names the
+   right company or it refuses. Nothing below hardcodes "NVDA" in prose. */
+function notSeeded(rules, what){
+  rules.push(`${ACTIVE.ticker}: entity resolved, no ${what} in scope \u2192 FAILED, not a default`);
+  return {rules, html:`${subject()}<span class="verdict v-block">NOT AVAILABLE</span>
+    <p>I resolved <b>${ACTIVE.ticker}</b> to <b>${ACTIVE.name}</b>, CIK
+      <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a>
+      (${ACTIVE.sector}). That part is real reference data and the EDGAR link above is live.</p>
+    <p>I have <b>no ${what}</b> for it. This prototype seeds one security end to end \u2014 NVDA \u2014
+      and connects to no market data feed at all. Rather than show you a number, I return nothing
+      and say why: a plausible figure with a real timestamp on it is the single worst output this
+      desk could produce.</p>
+    <p>What closes this gap is the entitled feed plus the client's security master. Neither is a
+      code change here; both are procurement.</p>
+    <div class="cite"><b>resolved from</b> S&amp;P 500 index membership \u00b7 <b>identifier</b> CIK
+      (ADR-0012) \u00b7 <b>price</b> none \u2014 not fetched, not cached, not estimated</div>`};
+}
+
+function answer(text){
+  const intent = classify(text);
+  const r = resolve(text);
+  const rules = [];
+
+  // Gate first, before any data is touched.
+  if (intent === "advice"){
+    rules.push("BLK-003 legal_medical_financial_advice");
+    return {rules, html:`<span class="verdict v-block">BLOCK \u00b7 BLK-003</span>
+      <p>I return data, not recommendations. Suitability and Reg BI live with the compliance
+      suite, which is not built in this prototype.</p>
+      <p>What I can give you: the quote with its provenance, the reconciled position, and the
+      filings behind a move. The judgment stays yours.</p>`};
+  }
+  if (intent === "clientfacing"){
+    rules.push("BLK-005 client_facing_output");
+    return {rules, html:`<span class="verdict v-block">BLOCK \u00b7 BLK-005</span>
+      <p>This desk is internal only \u2014 enforced by a CHECK constraint on
+      <code>ops.advisor_interaction.channel</code>, not by a policy note. Anything formatted to
+      send a client is a supervised communication under Rule 2210 and needs principal review.</p>`};
+  }
+
+  // A question that names a different security switches the active one, so the
+  // rail and the answer never disagree about who we are talking about.
+  if (r && r.sp && r.sp.ticker !== ACTIVE.ticker) setActive(r.sp.ticker, false);
+
+  let disclosure = "";
+  if (!r && intent !== "unknown"){
+    // No entity named. "Why is it down today?" has a subject: the symbol pinned
+    // above the fold. Binding to it is deterministic and disclosed; the old
+    // behaviour (ASK-201) was pedantry, because the rail already answers "it".
+    rules.push(`bind_to_pinned_symbol: ${ACTIVE.ticker} / CIK ${ACTIVE.cik}`);
+    disclosure = `<p>No security named, so I am reading this against the symbol pinned above \u2014
+      <b>${ACTIVE.ticker}</b>, ${ACTIVE.name}, CIK
+      <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a>.
+      Load a different symbol and the same question resolves to that one.</p>`;
+  }
+  if (r && r.conf < 0.90){
+    rules.push(`resolve_entity: provisional match (${r.conf.toFixed(3)} < 0.90)`);
+    disclosure = `<p>Read <b>\u201c${r.matched}\u201d</b> as <b>${ACTIVE.name}</b>, CIK
+      <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a> \u2014
+      matched as a <i>${r.kind}</i> at ${r.conf.toFixed(2)} confidence. Below 0.90 I disclose the
+      resolution rather than apply it silently.</p>`;
+  } else if (r){
+    rules.push(`resolve_entity: ${r.kind} @ ${r.conf.toFixed(3)}`);
+  }
+
+  const seeded = ACTIVE.seeded;
+  const m = seeded ? move(QUOTE) : null;
+
+  switch(intent){
+    case "book":
+      rules.push("quote_snapshot_agent: no quote book in this source \u2192 INDETERMINATE");
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ind">INDETERMINATE</span>
+        <p><b>Bid, ask and spread are unavailable for ${ACTIVE.ticker}, and they will stay
+        unavailable until the firm's entitled feed is connected.</b> This is not a gap in the
+        code and it is not a formatting problem \u2014 the interim chart source carries no quote
+        book at all. It returns last, previous close and OHLCV.</p>
+        <p>So the spread is <b>undefined</b>, not zero and not wide: with no bid and no ask there
+        is no mid to compute it from. I will not derive one from OHLC, which would be a fabricated
+        number with a real timestamp on it.</p>
+        <p>What unblocks it: an entitled Level 1 (or depth) feed under the firm's Reg NMS 603(c)
+        display agreement, with the per-user entitlement and display counts the vendor requires.
+        That is a contract and an integration, not a sprint task.</p>
+        ${seeded ? provenance() : ""}`};
+
+    case "price":
+      if (!seeded) return notSeeded(rules, "price");
+      calls++;
+      rules.push("market_clock: regular session, NYSE");
+      rules.push("pull_guard: second read agreed within 0.50%");
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ok">ANSWER</span>
+        <p><b>${ACTIVE.ticker} ${QUOTE.last} USD</b>, ${m.dir === "flat" ? "unchanged against" :
+          m.dir + " " + fmt2(Math.abs(m.abs)) + " (" + m.pctTxt + ") against"} a prior close of
+        ${QUOTE.prev_close}.</p>
+        <p>This is <b>15 minutes delayed</b>. It is not the price you would trade at, and the
+        halt state is unverified because this source does not report one. Bid, ask and spread are
+        absent for the same reason \u2014 they need the entitled feed.</p>
+        ${provenance()}`};
+
+    case "prevclose":
+      if (!seeded) return notSeeded(rules, "reconciled position or prior close");
+      rules.push("HEU-001 orion_close_is_authoritative_for_a_held_position");
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ok">ANSWER</span>
+        <p>${ACTIVE.ticker} prior close <b>${POSITION.close_price} USD</b>, from Orion's
+        reconciliation dated ${POSITION.as_of_date} \u2014 not the vendor's prior close.</p>
+        <p>Heuristic HEU-001: for a held position the number has to match the client statement,
+        so Orion supersedes the feed. The override is written to <code>ops.audit_log</code>
+        with the before and after.</p>
+        <div class="cite"><b>source</b> orion \u00b7 <b>as of</b> ${POSITION.as_of_date} \u00b7
+        <b>cite</b> ${POSITION.cite}</div>`};
+
+    case "position": {
+      if (!seeded) return notSeeded(rules, "position");
+      rules.push("ASK-207 stale_quantity_for_a_live_notional");
+      const notional = POSITION.qty * micro(QUOTE.last);
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ind">ASK \u00b7 ASK-207</span>
+        <p>${POSITION.household} holds <b>${POSITION.qty.toLocaleString("en-US")} shares</b> of
+        ${ACTIVE.ticker}, reconciled through <b>${POSITION.as_of_date}</b>. Multiplying that by the
+        delayed price gives <b>${fmtUSD(notional)}</b> \u2014 and that figure is wrong if anything
+        traded in the account since.</p>
+        <p>Use the T-1 quantity as of ${POSITION.as_of_date}, or wait for today's file?</p>
+        <div class="cite"><b>quantity</b> orion, as of ${POSITION.as_of_date} \u00b7
+        <b>price</b> ${QUOTE.source}, delayed 900s \u00b7 <b>cite</b> ${POSITION.cite}</div>`};
+    }
+
+    case "filings":
+      rules.push("filing_fact_agent: allowlist 3/4/5, 13D/G, 13F, 13H");
+      if (!seeded) return {rules, html:`${subject()}${disclosure}<span class="verdict v-ind">PARTIAL</span>
+        <p>No filings are indexed locally for <b>${ACTIVE.name}</b> \u2014 the EDGAR poller runs
+        against the seeded slice only. What I can hand you is the authoritative source itself:</p>
+        <p><a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">
+          EDGAR filing index for CIK ${ACTIVE.cik} \u2014 ${ACTIVE.name}</a></p>
+        <p>Pointing you at the primary source is a correct answer. Summarising filings I have not
+        retrieved would not be.</p>
+        <div class="cite"><b>source</b> sec.gov \u00b7 <b>identifier</b> CIK ${ACTIVE.cik}</div>`};
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ok">ANSWER</span>
+        <p>Three ${ACTIVE.ticker} filings on the intraday-material allowlist \u2014 each accession
+        links to the filing itself on EDGAR:</p>
+        <p>${FILINGS.map(f => `<b>${f.form}</b> \u2014 ${f.what}, filed ${ET(f.filed)}<br>
+          <a class="filing-lnk" style="font-family:var(--mono);font-size:11px"
+             href="${edgarFiling(QUOTE.cik, f.acc)}" target="_blank" rel="noopener noreferrer">${f.acc}</a>`).join("<br>")}</p>
+        <p>10-K and 10-Q are excluded by design: they land outside trading hours. Form 13H is on
+        the allowlist but will never appear \u2014 large-trader filings are confidential under
+        Exchange Act 13(h)(7).</p>
+        <div class="cite"><b>source</b> edgar.filing \u00b7 <b>issuer</b>
+        <a class="filing-lnk" href="${edgarIssuer(QUOTE.cik)}" target="_blank" rel="noopener noreferrer">CIK ${QUOTE.cik}</a></div>`};
+
+    case "news": {
+      if (!seeded) return notSeeded(rules, "price history, so no move to explain");
+      rules.push("quote_snapshot_agent: move computed from last vs prev_close");
+      rules.push("macro_news_scan_agent: candidate link, asserted=false");
+      // Two separate questions, answered separately: what the move IS, and
+      // whether anything explains it. Collapsing them is how a coincidence
+      // becomes a cause in an advisor's retelling.
+      const head = m.dir === "flat"
+        ? `<p><b>${ACTIVE.ticker} is not down today.</b> It is flat at
+             <b>${QUOTE.last}</b>, level with its prior close of ${QUOTE.prev_close}.</p>`
+        : m.dir === "up"
+        ? `<p><b>${ACTIVE.ticker} is not down today \u2014 it is up.</b> Last
+             <b>${QUOTE.last}</b> against a prior close of ${QUOTE.prev_close}:
+             <b>+${fmt2(Math.abs(m.abs))} (${m.pctTxt})</b>. If you were told it had fallen, that
+             is not what this row says.</p>`
+        : `<p><b>Yes \u2014 ${ACTIVE.name} (${ACTIVE.ticker}) is down.</b> Last
+             <b>${QUOTE.last}</b> against a prior close of ${QUOTE.prev_close}:
+             <b>\u2212${fmt2(Math.abs(m.abs))} (${m.pctTxt})</b>, as of
+             ${ET(QUOTE.as_of_at_utc)} on a 15-minute delay.</p>`;
+      const why = m.dir === "flat"
+        ? `<p>There is no move to explain, so there is nothing for me to attribute.</p>`
+        : `<p><b>Why: not established.</b> I can tell you what the move was, because that is
+             arithmetic on two rows I hold. I cannot tell you what caused it, and I will not
+             narrate one. The nearest disclosure in the window is a <b>Form 4</b> accepted at
+             ${ET(FILINGS[0].filed)} \u2014
+             <a class="filing-lnk" href="${edgarFiling(QUOTE.cik, FILINGS[0].acc)}" target="_blank" rel="noopener noreferrer">${FILINGS[0].acc}</a> \u2014
+             which is <i>temporally adjacent and nothing more</i>. A Section 16 report of an
+             insider transaction is not an explanation of a ${m.pctTxt} index-constituent move.</p>
+           <p>Macro and headline candidates are surfaced with the basis for each link \u2014
+             <i>issuer named</i>, <i>sector named</i>, <i>geography named</i> \u2014 and never as
+             a cause. <code>news.candidate_link.asserted</code> is pinned <b>false</b> by a
+             database CHECK, so promotion to a cause is impossible in the data model, not merely
+             discouraged in a prompt. Ranking a candidate into an explanation needs the relevancy
+             model, which is explicitly out of scope for this prototype.</p>
+           <p>What I would need to answer "why" honestly: an intraday tick series (entitled feed),
+             a headline corpus with timestamps, and a ranking model with a measured precision
+             floor. Absent those, "I do not know" is the correct answer and the cheap one.</p>`;
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ind">MOVE: ANSWERED \u00b7 CAUSE: UNKNOWN</span>
+        ${head}${why}
+        <div class="cite"><b>move</b> md.v_security_price, computed last \u2212 prev_close \u00b7
+          <b>candidates</b> news.headline (allowlisted publishers) \u00b7
+          <b>asserted</b> false \u2014 CHECK-enforced<br><b>cite</b> ${QUOTE.cite}</div>`};
+    }
+
+    default:
+      rules.push("gate_agent: ASK, under-specified");
+      return {rules, html:`<span class="verdict v-ind">ASK</span>
+        <p>I did not get a task out of that. Ask me for a quote, a prior close, a position, or the
+        filings behind a name \u2014 or load another S&amp;P 500 symbol in the box above the fold.</p>`};
+  }
+}
+
+function ledger(rules){
+  document.getElementById("ledger").innerHTML =
+    `<span>rules fired</span> ${rules.map(r => "\u00b7 " + r).join("<br>")}<br>
+     <span>call budget</span> ${calls} of ${CAP} this month \u00b7 pacing on`;
+}
+
+function ask(text){
+  say("u", `<p class="ask">${text.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</p>`);
+  const a = answer(text);
+  say("a", a.html);
+  ledger(a.rules);
+  document.getElementById("q").value = "";
+}
+
+/* --- Symbol switcher ----------------------------------------------------- */
+function setActive(ticker, announce){
+  const sp = SP_BY_TICKER[ticker];
+  if (!sp) return false;
+  ACTIVE = {...sp, seeded: ticker === "NVDA"};
+  renderRail();
+  if (announce){
+    say("a", ACTIVE.seeded
+      ? `<span class="verdict v-ok">LOADED</span>
+         <p><b>${ACTIVE.ticker} \u2014 ${ACTIVE.name}</b>, CIK
+           <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a>.
+           This is the seeded slice, so price, position and filings all answer.</p>`
+      : `<span class="verdict v-ind">RESOLVED, NOT PRICED</span>
+         <p><b>${ACTIVE.ticker} \u2014 ${ACTIVE.name}</b> (${ACTIVE.sector}), CIK
+           <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a>.
+           The identity resolved and the EDGAR link is live.</p>
+         <p>No price. The desk has one seeded slice (NVDA) and no market data feed, so every price
+           field reads <b>not fetched</b> rather than showing you something plausible. Ask about
+           filings and I will hand you the primary source.</p>`);
+    ledger([`symbol switch: ${ACTIVE.ticker} resolved from S&P 500 membership`,
+            ACTIVE.seeded ? "price slice: seeded" : "price slice: none \u2192 fields return NOT FETCHED"]);
+  }
+  return true;
+}
+
+const dl = document.getElementById("sp500");
+SP500.forEach(r => { const o = document.createElement("option");
+  o.value = r[0]; o.label = r[1]; dl.appendChild(o); });
+
+document.getElementById("symform").onsubmit = e => {
+  e.preventDefault();
+  const box = document.getElementById("sym");
+  const v = box.value.trim().toUpperCase();
+  if (!v) return;
+  if (!setActive(v, true)){
+    say("a", `<span class="verdict v-block">NOT IN SCOPE</span>
+      <p><b>${v.replace(/&/g,"&amp;").replace(/</g,"&lt;")}</b> is not one of the 502 S&amp;P 500
+        constituents in the reference table, so I will not resolve it. A ticker is not an
+        identifier \u2014 it is reused, reassigned and ambiguous across venues, which is why this
+        system keys on CIK and matches tickers only against a known membership list.</p>
+      <p>Non-index US issuers, ADRs and non-domestic listings are a scoping decision for the
+        client's security master, not something to guess at here.</p>`);
+    ledger([`symbol switch: ${v} not in the S&P 500 reference table \u2192 refused`]);
+  }
+  box.value = "";
+};
+
+const SEEDS = [
+  "What is NVDA trading at right now?",
+  "What is Nvidea trading at right now?",
+  "Give me the bid and ask on NVDA",
+  "Why is it down today?",
+  "What did the Wilson NVDA position close at?",
+  "What's that position worth right now?",
+  "Any recent NVDA filings?",
+  "What is AMD trading at?",
+  "Should my client buy more NVDA?",
+  "Draft this as an email to my client"
+];
+const seeds = document.getElementById("seeds");
+SEEDS.forEach(s => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "seed";
+  b.textContent = s;
+  if (s.includes("Nvidea")) b.title = "Misspelled on purpose \u2014 exercises the synonym table";
+  b.onclick = () => { ask(s); };
+  seeds.appendChild(b);
+});
+
+document.getElementById("form").onsubmit = e => {
+  e.preventDefault();
+  const v = document.getElementById("q").value.trim();
+  if (v) ask(v);
+};
+
+// Open in a working state, not an empty shell. Correctly spelled: the
+// misspelling demo is the second seed button, labelled as deliberate.
+renderRail();
+ask("What is NVDA trading at right now?");
+</script>

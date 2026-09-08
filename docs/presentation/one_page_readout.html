@@ -1,0 +1,364 @@
+<title>Quote Desk Readout</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Palette approximated from Perficient's March 2026 refresh (black/red -> dark
+   green and white). Exact brand hex values are not published; swap this block. */
+:root{
+  --brand-900:#0F2A1E; --brand-700:#1B4332; --brand-500:#2D6A4F; --brand-300:#7FA894;
+  --brand-050:#EAF1ED;
+  --ink:#121A16; --ink-2:#3C4A43; --muted:#67756D; --rule:#DCE4DF;
+  --paper:#F7F9F8; --surface:#FFFFFF; --surface-2:#F1F5F3;
+  --ok:#2D6A4F; --warn:#8A6112; --warn-bg:#FDF6E7; --crit:#8C2F22; --crit-bg:#FBEFED;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:12.5px;line-height:1.42}
+.slide{max-width:1480px;margin:0 auto;padding:22px 26px 30px}
+h1,h2,h3{margin:0;text-wrap:balance}
+
+.top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+     border-bottom:3px solid var(--brand-700);padding-bottom:11px;margin-bottom:16px}
+.top h1{font-size:23px;font-weight:700;letter-spacing:-.02em;color:var(--brand-900)}
+.top .dek{font-size:13px;color:var(--ink-2);max-width:60ch}
+.top .stamp{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--muted);text-align:right;line-height:1.6}
+
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.box{background:var(--surface);border:1px solid var(--rule);border-radius:7px;padding:12px 14px;min-width:0}
+.box.dark{background:var(--brand-900);border-color:var(--brand-900);color:#fff}
+.box.dark h2{color:#fff}
+.box.dark .lbl{color:var(--brand-300)}
+h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:var(--brand-700);
+   margin-bottom:9px;display:flex;align-items:baseline;gap:8px}
+h2 .n{font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:500;letter-spacing:0;margin-left:auto}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c3{grid-column:span 3}
+.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+@media(max-width:1100px){.c4,.c5,.c3,.c6,.c7,.c8{grid-column:span 12}}
+
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+td,th{text-align:left;vertical-align:top;padding:3.5px 8px 3.5px 0;border-bottom:1px solid var(--rule)}
+th{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:600}
+tr:last-child td{border-bottom:none}
+td.a{font-family:var(--mono);font-size:10.5px;color:var(--brand-700);white-space:nowrap}
+td.m{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap}
+
+ol,ul{margin:0;padding-left:15px}
+li{margin-bottom:3.5px}
+ol.burn{counter-reset:b;list-style:none;padding-left:0}
+ol.burn li{counter-increment:b;padding-left:23px;position:relative;margin-bottom:5px}
+ol.burn li::before{content:counter(b);position:absolute;left:0;top:0;font-family:var(--mono);font-size:9.5px;
+  font-weight:600;color:var(--brand-700);background:var(--brand-050);width:17px;height:17px;
+  border-radius:3px;display:grid;place-items:center}
+ol.burn b{color:var(--brand-900)}
+
+.pill{display:inline-block;font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.04em;
+      padding:1.5px 6px;border-radius:3px;vertical-align:1px}
+.p-ok{background:var(--brand-050);color:var(--brand-700)}
+.p-gap{background:var(--warn-bg);color:var(--warn)}
+.p-no{background:var(--crit-bg);color:var(--crit)}
+
+.kpis{display:flex;gap:18px;flex-wrap:wrap}
+.kpi .v{font-family:var(--mono);font-size:22px;font-weight:600;line-height:1.1}
+.kpi .lbl{font-size:9.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.kpi .v.warnv{color:#F0C070}
+
+.flow{display:flex;flex-direction:column;gap:5px;font-size:11.5px}
+.flow .step{display:flex;gap:8px;align-items:flex-start}
+.flow .num{font-family:var(--mono);font-size:9.5px;font-weight:600;color:#fff;background:var(--brand-500);
+           width:16px;height:16px;border-radius:3px;display:grid;place-items:center;flex:0 0 auto;margin-top:1px}
+.flow .num.stop{background:var(--crit)}
+.flow b{color:var(--brand-900)}
+svg{display:block;width:100%;height:auto}
+.foot{margin-top:14px;padding-top:10px;border-top:1px solid var(--rule);font-size:10.5px;color:var(--muted)}
+.foot b{color:var(--ink-2)}
+</style>
+
+<div class="slide">
+  <div class="top">
+    <h1>Advisor Quote Desk</h1>
+    <div class="dek">A multi-agent desk for US equity quotes, SEC disclosure, and macro context — built so every
+      answer is cited, every refusal is structural, and every unmeasured claim says so.</div>
+    <div class="stamp">prototype · 2026-09-08<br>12 ADRs · 146 tests green<br>12 red-team defects fixed<br>eval adapter: <b>stub</b> — nothing measured</div>
+  </div>
+
+  <div class="grid">
+
+    <!-- ERD -->
+    <div class="box c5">
+      <h2>Data model <span class="n">26 tables live on local Postgres 16</span></h2>
+      <svg viewBox="0 0 720 392" role="img" aria-label="Entity relationship diagram">
+        <defs>
+          <style>
+            .b{fill:#FFFFFF;stroke:#1B4332;stroke-width:1.4;rx:5}
+            .b2{fill:#EAF1ED;stroke:#2D6A4F;stroke-width:1.2;rx:5}
+            .b3{fill:#F1F5F3;stroke:#67756D;stroke-width:1;rx:5;stroke-dasharray:3 2}
+            .t{font-family:"IBM Plex Mono",monospace;font-size:11.5px;fill:#0F2A1E;font-weight:600}
+            .k{font-family:"IBM Plex Mono",monospace;font-size:9.5px;fill:#3C4A43}
+            .n{font-family:"IBM Plex Sans",sans-serif;font-size:9px;fill:#67756D}
+            .ln{stroke:#2D6A4F;stroke-width:1.3;fill:none}
+            .ld{stroke:#67756D;stroke-width:1.1;fill:none;stroke-dasharray:4 3}
+            .lb{font-family:"IBM Plex Mono",monospace;font-size:8.5px;fill:#2D6A4F}
+          </style>
+        </defs>
+
+        <rect class="b"  x="20"  y="24"  width="200" height="62"/>
+        <text class="t"  x="30"  y="42">core.entity</text>
+        <text class="k"  x="30"  y="57">PK entity_id = CIK</text>
+        <text class="n"  x="30"  y="72">natural key, not a uuid</text>
+
+        <rect class="b"  x="250" y="24"  width="200" height="62"/>
+        <text class="t"  x="260" y="42">md.security</text>
+        <text class="k"  x="260" y="57">PK figi · FK cik</text>
+        <text class="n"  x="260" y="72">ticker is a label, not a key</text>
+
+        <rect class="b"  x="480" y="24"  width="200" height="62"/>
+        <text class="t"  x="490" y="42">md.quote_snapshot</text>
+        <text class="k"  x="490" y="57">FK figi · immutable</text>
+        <text class="n"  x="490" y="72">source · delay · as_of</text>
+
+        <rect class="b2" x="20"  y="116" width="200" height="62"/>
+        <text class="t"  x="30"  y="134">core.entity_synonym</text>
+        <text class="k"  x="30"  y="149">kind · confidence</text>
+        <text class="n"  x="30"  y="164">22 NVDA variants seeded</text>
+
+        <rect class="b"  x="250" y="116" width="200" height="62"/>
+        <text class="t"  x="260" y="134">pos.position_snapshot</text>
+        <text class="k"  x="260" y="149">FK figi · as_of_date</text>
+        <text class="n"  x="260" y="164">Orion, reconciled T-1</text>
+
+        <rect class="b"  x="480" y="116" width="200" height="62"/>
+        <text class="t"  x="490" y="134">edgar.filing</text>
+        <text class="k"  x="490" y="149">PK accession_no</text>
+        <text class="n"  x="490" y="164">the citation key</text>
+
+        <rect class="b3" x="20"  y="208" width="200" height="62"/>
+        <text class="t"  x="30"  y="226">ops.advisor_interaction</text>
+        <text class="k"  x="30"  y="241">channel = internal_chat</text>
+        <text class="n"  x="30"  y="256">compliance join key</text>
+
+        <rect class="b"  x="250" y="208" width="200" height="62"/>
+        <text class="t"  x="260" y="226">news.candidate_link</text>
+        <text class="k"  x="260" y="241">asserted = false (CHECK)</text>
+        <text class="n"  x="260" y="256">never a stated cause</text>
+
+        <rect class="b"  x="480" y="208" width="200" height="62"/>
+        <text class="t"  x="490" y="226">news.headline</text>
+        <text class="k"  x="490" y="241">allowlisted publishers</text>
+        <text class="n"  x="490" y="256">url · published_at</text>
+
+        <rect class="b3" x="20"  y="300" width="200" height="62"/>
+        <text class="t"  x="30"  y="318">ops.flag</text>
+        <text class="k"  x="30"  y="333">supervision writes only</text>
+        <text class="n"  x="30"  y="348">desk cannot clear its own</text>
+
+        <rect class="b3" x="250" y="300" width="200" height="62"/>
+        <text class="t"  x="260" y="318">ops.hitl_queue</text>
+        <text class="k"  x="260" y="333">every ASK / BLOCK</text>
+        <text class="n"  x="260" y="348">escalation is an outcome</text>
+
+        <rect class="b3" x="480" y="300" width="200" height="62"/>
+        <text class="t"  x="490" y="318">ops.failure_log</text>
+        <text class="k"  x="490" y="333">retry exhaustion</text>
+        <text class="n"  x="490" y="348">no substituted default</text>
+
+        <line class="ln" x1="220" y1="55" x2="250" y2="55"/>
+        <text class="lb" x="222" y="50">cik</text>
+        <line class="ln" x1="450" y1="55" x2="480" y2="55"/>
+        <text class="lb" x="452" y="50">figi</text>
+        <line class="ln" x1="120" y1="86" x2="120" y2="116"/>
+        <text class="lb" x="125" y="104">entity_id</text>
+        <line class="ln" x1="350" y1="86" x2="350" y2="116"/>
+        <text class="lb" x="355" y="104">figi</text>
+        <line class="ln" x1="350" y1="178" x2="350" y2="208"/>
+        <text class="lb" x="355" y="196">figi</text>
+        <line class="ln" x1="480" y1="239" x2="450" y2="239"/>
+        <text class="lb" x="452" y="234">hl_id</text>
+        <line class="ld" x1="60"  y1="86" x2="60" y2="101"/>
+        <line class="ld" x1="60"  y1="101" x2="580" y2="101"/>
+        <line class="ld" x1="580" y1="101" x2="580" y2="116"/>
+        <text class="lb" x="240" y="97">entity_id = cik</text>
+        <line class="ld" x1="120" y1="270" x2="120" y2="300"/>
+        <text class="lb" x="125" y="288">interaction_id</text>
+      </svg>
+    </div>
+
+    <!-- Workflow -->
+    <div class="box c4">
+      <h2>Workflow <span class="n">gate first, commit once</span></h2>
+      <div class="flow">
+        <div class="step"><div class="num stop">0</div><div><b>gate_agent</b> — PROCEED / ASK / BLOCK before any data is touched. Zero data scope by design.</div></div>
+        <div class="step"><div class="num">1</div><div><b>advisor_desk_orchestrator</b> parses intent, writes the interaction row, routes.</div></div>
+        <div class="step"><div class="num stop">2</div><div><b>market_clock</b> — outside the NYSE regular session no call is made at all. Two thirds of a 24-hour schedule, free.</div></div>
+        <div class="step"><div class="num">3</div><div><b>quote_snapshot_agent</b> (no model) fetches, re-checks once on empty, compares two reads, escalates on a halt.</div></div>
+        <div class="step"><div class="num">4</div><div><b>research_orchestrator</b> → filing_fact + macro_news, in parallel, returning rows only.</div></div>
+        <div class="step"><div class="num">5</div><div><b>discrepancy_agent</b> when two sources disagree — reports the divergence, never picks.</div></div>
+        <div class="step"><div class="num">6</div><div><b>heuristic_override_agent</b> runs last; every fire writes rule_id + before/after.</div></div>
+        <div class="step"><div class="num">7</div><div><b>advisor_answer_agent</b> composes from returned rows. It cannot fetch and cannot send.</div></div>
+        <div class="step"><div class="num stop">8</div><div><b>supervision_orchestrator</b> holds the only write on ops.flag. The desk cannot clear a flag on its own output.</div></div>
+      </div>
+    </div>
+
+    <!-- Agents -->
+    <div class="box c3">
+      <h2>Agents <span class="n">11 + 3 orchestrators</span></h2>
+      <table>
+        <tr><th>agent</th><th>model</th></tr>
+        <tr><td class="a">gate_agent</td><td class="m">sonnet</td></tr>
+        <tr><td class="a">quote_snapshot</td><td class="m">none</td></tr>
+        <tr><td class="a">orion_position</td><td class="m">sonnet</td></tr>
+        <tr><td class="a">filing_fact</td><td class="m">sonnet</td></tr>
+        <tr><td class="a">macro_news_scan</td><td class="m">sonnet</td></tr>
+        <tr><td class="a">advisor_answer</td><td class="m">sonnet</td></tr>
+        <tr><td class="a">failure_triage</td><td class="m">sonnet</td></tr>
+        <tr><td class="a">wsp_flag</td><td class="m">stub</td></tr>
+        <tr><td class="a">red_team</td><td class="m">opus</td></tr>
+        <tr><td class="a">discrepancy</td><td class="m">opus</td></tr>
+        <tr><td class="a">heuristic_override</td><td class="m">opus</td></tr>
+      </table>
+      <p style="margin:9px 0 0;font-size:10.5px;color:var(--muted)">Sonnet for every source and DB pull.
+        Opus only where being wrong is a judgment error, not a retrieval error. Routing lives in the
+        registry; the cost model reads it, so the two cannot drift.</p>
+    </div>
+
+    <!-- Backend stood up -->
+    <div class="box dark c3">
+      <h2>Stood up</h2>
+      <div class="kpis" style="margin-bottom:10px">
+        <div class="kpi"><div class="v">26</div><div class="lbl">tables</div></div>
+        <div class="kpi"><div class="v">146</div><div class="lbl">tests green</div></div>
+        <div class="kpi"><div class="v warnv">0</div><div class="lbl">measured evals</div></div>
+      </div>
+      <ul style="font-size:11px;color:#DCE4DF">
+        <li>Postgres 16, schemas 001–006 applied</li>
+        <li>CIK canonical ids, CHECK-enforced by entity type</li>
+        <li>One money rule: <span style="font-family:var(--mono)">numeric(20,6)</span>, Rule 612 on quotations</li>
+        <li>Per-agent roles + RLS failing closed</li>
+        <li>NYSE clock with the 2026 holiday table</li>
+        <li>Call budget: session TTL, dedupe, monthly pacing</li>
+        <li>Pydantic at every ingest boundary</li>
+        <li>CCO halt notification path, transport-injected</li>
+        <li>Advisor desk front end: 502-symbol resolver, live EDGAR citations</li>
+      </ul>
+      <p style="margin:9px 0 0;font-size:10.5px;color:#7FA894">Not stood up: no agent runtime,
+        no live pull (egress blocked), no auth, no deployment.</p>
+    </div>
+
+    <!-- Red team -->
+    <div class="box c12">
+      <h2>Red team <span class="n">12 defects found and fixed after the build was &ldquo;done&rdquo; · 8 new regression tests</span></h2>
+      <p style="margin:0 0 9px;font-size:11px;color:var(--ink-2)">Every one of these passed 138 green tests.
+        They survived because the fixtures were hand-written with clean values and egress is blocked, so
+        <b>no real payload ever crossed the boundary</b>. Two would have taken the desk down on day one.
+        This is the argument for a red-team pass as a build step rather than a phase: a green suite proves
+        the code does what the tests say, not what the source does.</p>
+      <table>
+        <tr><th style="width:8%">id</th><th style="width:44%">defect</th><th>what it would have cost in production</th></tr>
+        <tr><td class="m"><b>RT-01</b></td><td><b>Every real price failed validation.</b> <span style="font-family:var(--mono);font-size:10.5px">decimal_places=6</span> is a <i>maximum</i> in pydantic; Yahoo serializes doubles, so <span style="font-family:var(--mono);font-size:10.5px">226.03999328613281</span> raised.</td><td class="m">Total outage of the price path, presenting as &ldquo;source unavailable.&rdquo; Days lost blaming the vendor.</td></tr>
+        <tr><td class="m"><b>RT-02</b></td><td><b>The NYSE calendar was bounded only above.</b> Any date before 2026 scored against the 2026 holiday table: 2025-12-25 and 2024-07-04 both returned <i>regular session</i>.</td><td class="m">A backfill or fixture replay marked tradeable on Christmas. Silent, and wrong in the direction that fetches.</td></tr>
+        <tr><td class="m"><b>RT-11</b></td><td><b>The poller exited 0 on failure.</b> <span style="font-family:var(--mono);font-size:10.5px">main()</span> compared status to the literal <span style="font-family:var(--mono);font-size:10.5px">"FAILED"</span>, so FAILED_NO_DATA, both INDETERMINATE states and FALLBACK_REQUIRED all reported success.</td><td class="m">Cron logs green over a desk serving nothing. The failure mode CLAUDE.md #6 exists to prevent, in the monitoring layer.</td></tr>
+        <tr><td class="m"><b>RT-03/04</b></td><td><b>Only HTTPError was caught.</b> A reset or timeout on the EDGAR leg propagated out, killed the price leg, and skipped <span style="font-family:var(--mono);font-size:10.5px">save_state()</span> — losing the ETag and the call counters with it.</td><td class="m">One network blip burns the conditional-GET cache and double-charges the monthly cap.</td></tr>
+        <tr><td class="m"><b>RT-07</b></td><td><b>A cache hit returned no row.</b> The dedupe that justifies the entire call budget delivered <span style="font-family:var(--mono);font-size:10.5px">{"status":"cache"}</span> and nothing else.</td><td class="m">The budget design was decorative: N advisors, N calls.</td></tr>
+        <tr><td class="m"><b>RT-05/06</b></td><td><b>The audit record lied.</b> The exception was discarded, so a parser bug and a vendor outage wrote identical failure rows; the recovery path wrote &ldquo;verified by a second read&rdquo; when nothing was verified.</td><td class="m">Un-triageable incidents, and an audit trail that misstates what happened — the worst kind, because it is confident.</td></tr>
+        <tr><td class="m"><b>RT-12</b></td><td><b>A clean checkout could not run.</b> <span style="font-family:var(--mono);font-size:10.5px">make setup</span> installed <span style="font-family:var(--mono);font-size:10.5px">jsonschema</span> (imported nowhere) and not <span style="font-family:var(--mono);font-size:10.5px">pydantic</span> (imported everywhere).</td><td class="m">Every new engineer's first hour. Now pinned in <span style="font-family:var(--mono);font-size:10.5px">requirements.txt</span>.</td></tr>
+        <tr><td class="m"><b>RT-13</b></td><td><b>Thirteen S&amp;P 500 tickers are English words.</b> The front-end resolver read &ldquo;Why is <i>it</i> down today?&rdquo; as Gartner (IT) and &ldquo;what is that worth right <i>now</i>?&rdquo; as ServiceNow (NOW).</td><td class="m">The precise failure this system exists to prevent: a confident, sourced, fully-cited answer about the wrong company. Found by running the page headless, not by reading it.</td></tr>
+      </table>
+      <p style="margin:9px 0 0;font-size:10.5px;color:var(--muted)">Excluded from this list as boundary
+        conditions, not defects: blocked egress, the stub eval adapter, the absent entitled feed, and the
+        absent agent runtime. Those are known and scoped. Also fixed but not tabled: RT-09 (the documented
+        cron and <span style="font-family:var(--mono)">make poll</span> both used a 15-minute interval that
+        the budget refuses to start on) and RT-10 (<span style="font-family:var(--mono)">retrieved_at</span>
+        stamped at the top of the cycle, so a slow EDGAR call made a fresh print fail as &ldquo;a quote from
+        the future&rdquo;).</p>
+    </div>
+
+    <!-- Evals -->
+    <div class="box c7">
+      <h2>Evaluation <span class="n">49 golden cases · 25 categories · adapter = stub</span></h2>
+      <table>
+        <tr><th style="width:30%">written</th><th style="width:32%">not written</th><th>needed before production</th></tr>
+        <tr>
+          <td>
+            <span class="pill p-ok">49 cases</span> gate block · gate ASK · <b>gate persistence under pressure</b> ·
+            ceiling rule · least privilege · fail-loud · no-send · no-fetch · citation sufficiency · silo integrity ·
+            source disagreement · trading halt · market closed · provenance · Rule 612 precision ·
+            override fires <i>and</i> declines · no-causation · unavailable field.
+            Every agent and every live orchestrator has at least one case.
+          </td>
+          <td>
+            <span class="pill p-no">no measured numbers</span>
+            The adapter is a stub, so nothing scores the real system and no baseline is set —
+            setting one from stub mode would be a false record.<br>
+            Also absent: latency p95 · cost per task from observed tokens · prompt-injection through
+            a filing or headline · multi-turn drift within a session · entity-resolution precision and
+            recall against a labeled set · XBRL extraction fidelity vs. ground truth ·
+            any symbol other than NVDA.<br><br>
+            <b>Front end:</b> the desk UI has no test at all. The homograph defect (RT-13) was found by a
+            one-off headless run, not a suite. A Playwright case per intent is the cheapest eval left unbuilt.
+          </td>
+          <td>
+            <span class="pill p-gap">fidelity</span> <b>Citation faithfulness</b> — every numeric claim must
+            resolve to a row containing it. Deterministic, not LLM-judged.<br>
+            <span class="pill p-gap">calibration</span> <b>Over-refusal rate</b> measured beside refusal
+            precision. A gate that blocks everything scores 100% on safety and is useless.<br>
+            <span class="pill p-gap">drift</span> <b>Frozen-fixture replay</b> weekly: identical input,
+            changed output <i>is</i> drift. Per-case comparison, not aggregate — the config already does this.<br>
+            <span class="pill p-gap">drift</span> <b>Model-swap regression</b> across the routing tiers, to
+            price the Sonnet/Opus bet with data instead of argument.<br>
+            <span class="pill p-gap">human</span> <b>Supervisory sampling</b> — N% of turns to a principal with a
+            recorded agreement rate. This is the artifact a Rule 3110 examination asks for, and no
+            vendor can produce it for you.<br>
+            <span class="pill p-gap">scale</span> <b>≥200 cases across ≥25 symbols</b>, including halted,
+            sub-$1, and thin-book names.
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Burndown -->
+    <div class="box c5">
+      <h2>Burndown to production <span class="n">ranked, dependencies first</span></h2>
+      <ol class="burn">
+        <li><b>Agent runtime</b> — implement <span style="font-family:var(--mono);font-size:10.5px">SystemAdapter.invoke</span> and the six domain agents. Until this lands, nothing is measured.</li>
+        <li><b>Entitled market-data feed</b> — delete the interim source path; bid/ask/spread and halt status arrive with it.</li>
+        <li><b>Orion + clearing reads</b> — intraday quantity, so a notional stops mixing T-1 shares with a live price.</li>
+        <li><b>Retention and audit pipeline</b> — raw turn persisted before compaction, immutable, exportable.</li>
+        <li><b>WSP rule table + supervision agent</b> — the flag endpoints have no referent until the rules have ids.</li>
+        <li><b>AuthN/AuthZ wiring</b> — the RLS boundary is only real if the runtime connects as the agent's role.</li>
+        <li><b>Eval corpus + first real baseline</b>, then drift on every deploy.</li>
+        <li><b>Observability</b> — failure_log and hitl_queue triage in front of a human, not in a table.</li>
+        <li><b>Scale to a watchlist</b> and re-measure cost: the cap scales linearly with symbol count.</li>
+        <li><b>HA, backup, key management, DR.</b></li>
+        <li><b>Front-end test suite</b> — headless per-intent assertions, so a resolver change cannot silently answer about the wrong issuer again.</li>
+      </ol>
+    </div>
+
+    <!-- Management decisions -->
+    <div class="box c7">
+      <h2>Gating issues no third party can resolve <span class="n">broker management owns these</span></h2>
+      <table>
+        <tr><th style="width:27%">decision</th><th style="width:36%">why a vendor cannot make it</th><th>blocked until decided</th></tr>
+        <tr><td><b>Market-data entitlement</b></td><td>An exchange agreement with per-user professional-subscriber reporting is a contract the firm signs, and Rule 603(c) governs how a quote may be displayed.</td><td class="m">real-time quotes; the whole bid/ask feature</td></tr>
+        <tr><td><b>Is desk output a recommendation?</b></td><td>Reg BI turns on the firm's own view of what its reps do with an answer. Nobody outside can classify it.</td><td class="m">any advisor-facing rollout</td></tr>
+        <tr><td><b>WSPs as testable rules</b></td><td>The procedures are the firm's, in prose, with firm-specific ids and owners. Converting them is a compliance project, not an integration.</td><td class="m">every flag endpoint; supervision silo</td></tr>
+        <tr><td><b>Supervisory review model</b></td><td>Who reviews, at what sampling rate, with what escalation and what evidence — Rule 3110 asks the firm, not the tool.</td><td class="m">human-review evals; examination readiness</td></tr>
+        <tr><td><b>Authoritative source for intraday quantity</b></td><td>Orion vs. the clearing firm is a books-and-records decision with a supervisory owner.</td><td class="m">notional; unrealized P/L</td></tr>
+        <tr><td><b>Retention design for AI turns</b></td><td>What constitutes the record, and for how long, is the firm's counsel's call.</td><td class="m">compaction economics; audit export</td></tr>
+        <tr><td><b>Provisional-match tolerance</b></td><td>Whether 0.90 confidence is enough to act on a resolved name is a risk-appetite question.</td><td class="m">entity-resolution thresholds</td></tr>
+        <tr><td><b>Model-use governance</b></td><td>Which models, in which region, over which data, with what vendor terms.</td><td class="m">routing; any client-data path</td></tr>
+        <tr><td><b>Cost cap and cadence per advisor</b></td><td>A spend ceiling is a budget decision that changes the architecture, not a tuning knob.</td><td class="m">polling design; watchlist scale</td></tr>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="foot">
+    <b>Honest state.</b> No live pull has run — this environment's egress policy returns 403 for
+    <span style="font-family:var(--mono)">sec.gov</span> and
+    <span style="font-family:var(--mono)">finance.yahoo.com</span>, so the poller is proven against recorded
+    payloads only. The eval harness runs end to end in <b>stub</b> mode, which is why no pass rate appears
+    anywhere on this page. The price source and the SEC form allowlist are hardcoded pending client
+    decisions, recorded in ADR-0010 and ADR-0011.
+  </div>
+</div>
