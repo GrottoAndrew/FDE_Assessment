@@ -1,0 +1,28 @@
+# secrets
+.env
+.env.local
+*.pem
+*.key
+credentials.json
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# node
+node_modules/
+dist/
+
+# eval runtime artifacts — keep the summaries, drop the noise
+eval_output/**/raw/
+eval_output/**/*.tmp
+
+# local agent state
+.claude/turn_counter
+.claude/state/
+.DS_Store

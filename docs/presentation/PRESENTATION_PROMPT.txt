@@ -1,0 +1,103 @@
+================================================================================
+PRESENTATION + SYSTEM DESIGN PROMPT  —  auto-generated, do not hand-edit
+Regenerates every 5 turns.  Last write: turn 2  |  2026-09-08 16:13 UTC
+Source of truth: this repo.  Force refresh: `make deck`
+================================================================================
+
+ROLE
+You are preparing a 10-minute readout of a multi-agent system built in a 2.5-hour
+sprint. Audience: technical interviewers who will probe design tradeoffs, not
+feature counts. Optimize for defensibility over completeness.
+
+--------------------------------------------------------------------------------
+STATE SNAPSHOT (scraped from repo at turn 2)
+--------------------------------------------------------------------------------
+Branch: HEAD
+
+Architecture decisions on record:
+  - ADR-0001: Record architecture decisions as short ADRs during the sprint  [accepted]
+  - ADR-0002: Decompose by task, not by job title  [accepted]
+  - ADR-0003: One canonical entity table; ISO code tables for every enumerable field  [accepted]
+  - ADR-0004: Gate before work; fail loudly on exhaustion  [accepted]
+  - ADR-0005: Tribal knowledge is a declarative override layer, not prompt text  [accepted]
+
+Agents shipped (narrow-scope, one job each):
+  - sales_orchestrator: Route sales-domain work to sales sub-agents and commit their results.
+  - marketing_orchestrator: Drain ops.handoff_queue for target_domain='marketing' and route to marketing sub-agents.
+  - red_team_agent: Return a falsification verdict on another agent's output.
+  - discrepancy_agent: Locate the source table where two systems disagree about one field.
+  - heuristic_override_agent: Apply the tribal-knowledge rules in policies/heuristics.yaml to a pending decision.
+  - gate_agent: Classify an input as PROCEED, ASK, or BLOCK before any work begins.
+  - appointment_setting_agent: Propose three meeting slots for one contact.
+  - call_prep_agent: Assemble a one-page brief for one scheduled call.
+  - order_tracking_agent: Return current fulfillment status for one order id.
+  - crm_monitor_agent: Flag CRM records whose required fields went stale past threshold.
+  - email_response_agent: Draft one reply to one inbound sales email.
+  - refund_eligibility_agent: Decide refund eligibility for one order under the written policy.
+  - funnel_cadence_agent: Determine the next scheduled touch for one opportunity.
+  - sales_analytics_agent: Compute one named metric over one date range.
+
+Latest eval:
+  - baseline: pass 23/26 (88.5%), p50 0.0ms, drift vs baseline no baseline — run with --set-baseline to establish one
+
+Recent commits:
+  (none yet)
+
+Uncommitted work in flight:
+  - ?? .claude/
+  - ?? .env.example
+  - ?? .gitignore
+  - ?? Makefile
+  - ?? docs/
+  - ?? eval_output/
+  - ?? eval_workflows/
+  - ?? scripts/
+  - ?? src/
+  - ?? tests/
+
+Open human-review / gating flags:
+  - ./.venv/lib/python3.13/site-packages/pygments/lexers/modula2.py:446:        'ALIAS', 'ARGLIST', 'BLUEPRINT', 'COPY', 'GENLIB', 'INDETERMINATE',
+  - ./scripts/turn_tick.py:91:    # Open HITL / gating flags left in code
+  - ./scripts/turn_tick.py:94:        "-E 'HITL|NEEDS_HUMAN|INDETERMINATE|TODO\\(gate\\)' . | head -12"
+  - ./src/agents/AGENT_REGISTRY.yaml:82:      - "If timestamps are not ISO-8601 UTC, normalize before comparing or return INDETERMINATE."
+  - ./src/agents/AGENT_REGISTRY.yaml:98:      - "Two rules matching with opposite outcomes = INDETERMINATE -> human gate."
+  - ./src/agents/AGENT_REGISTRY.yaml:148:    hardcoded_rules: ["Status not in the ISO status enum returns INDETERMINATE, never a guess."]
+  - ./src/policies/heuristics.yaml:68:  on_multiple_matches_opposite_outcome: "INDETERMINATE -> ops.hitl_queue, apply nothing"
+  - ./src/policies/heuristics.yaml:69:  on_precondition_null: "INDETERMINATE -> ops.hitl_queue, apply nothing"
+  - ./src/policies/retry.yaml:39:      Run {run_id} halted at step {step}. HITL row {hitl_id}. No fallback applied.
+  - ./src/data/schema/003_agent_scopes.sql:84:-- An agent sees only the HITL rows it raised.
+
+--------------------------------------------------------------------------------
+DECK TO PRODUCE (8 slides, in this order)
+--------------------------------------------------------------------------------
+1. PROBLEM FRAME — the problem in one sentence, plus the two constraints that
+   actually shaped the build. Name what you deliberately did NOT build.
+2. SYSTEM DESIGN — one diagram. Orchestrator(s), narrow sub-agents, the data
+   plane, and the gate. Show the trust boundary, not just the boxes.
+3. WHY NARROW AGENTS — contrast one broad agent vs. the decomposition here.
+   Argue from testability, blast radius, and eval granularity — not from taste.
+4. DATA LAYER — canonical entity model, the join keys, and which ISO tables
+   normalize which fields. Explain what breaks without canonicalization.
+5. GUARDRAILS — gating on sensitive/indeterminate input, retry policy and the
+   fail-loud notification, least-privilege data scoping per agent, and the
+   heuristic-override layer with its audit trail.
+6. EVALS — the golden set: how it was built, what each tier measures, current
+   numbers, and how drift is tracked across runs.
+7. WHAT I'D DO WITH ANOTHER WEEK — ranked, with the reason each item is next.
+8. RISKS + OPEN QUESTIONS — including anything still flagged for human review.
+
+--------------------------------------------------------------------------------
+RULES FOR THE GENERATED DECK
+--------------------------------------------------------------------------------
+- Every claim traces to a file in this repo. No aspirational features.
+- If a number is not in eval_output/, say "not measured" — never estimate.
+- Name the tradeoff you lost, not only the one you won.
+- Keep speaker notes to 3 lines per slide.
+- If state above is thin, say the sprint was timeboxed and show the seams.
+
+--------------------------------------------------------------------------------
+HOW TO USE
+--------------------------------------------------------------------------------
+Paste this whole file into Gamma (generate), or into Claude with:
+  "Build the deck described in this prompt using only the state snapshot above."
+================================================================================

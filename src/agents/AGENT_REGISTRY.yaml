@@ -1,0 +1,202 @@
+# ==============================================================================
+# AGENT_REGISTRY.yaml — the single source of truth for agent topology.
+#
+# RULE: an agent that is not in this file does not exist. No ad-hoc spawning.
+#
+# Every agent declares (a) exactly one task, (b) the smallest set of tables it
+# can possibly need, (c) the deterministic rules it obeys instead of improvising,
+# and (d) the conditions under which it must stop and escalate to a human.
+#
+# The sales silo below is a WORKED EXAMPLE of the decomposition style, not the
+# assignment. On sprint day: keep the four SYSTEM agents verbatim, delete the
+# domain agents, and re-derive domain agents from the problem statement.
+# ==============================================================================
+
+meta:
+  schema_version: 1
+  decomposition_rule: >
+    An agent's task must be stateable in one line with one verb and one object.
+    If describing it needs "and" or "or", it is two agents. If it needs an
+    adjective like "smart" or "assistant", it is not yet a task.
+  default_limits:
+    max_retries: 2            # then fail loud — see src/policies/retry.yaml
+    timeout_seconds: 45
+    max_output_tokens: 2000
+  write_default: deny         # agents read; the orchestrator commits
+
+# ------------------------------------------------------------------------------
+# ORCHESTRATORS — one per business domain. Strictly siloed.
+# ------------------------------------------------------------------------------
+orchestrators:
+  - name: sales_orchestrator
+    domain: sales
+    single_task: "Route sales-domain work to sales sub-agents and commit their results."
+    owns_write: true
+    data_scope: [core.entity, core.account, sales.opportunity, sales.activity, ops.audit_log]
+    cross_domain_policy: >
+      Never acts outside `domain`. Anything marketing-shaped is written to
+      ops.handoff_queue with target_domain='marketing' and dropped. It does not
+      reason about it, summarize it, or act on it. The marketing orchestrator
+      drains that queue on its own schedule.
+    escalate_when:
+      - "two sub-agents return contradictory facts about the same entity_id"
+      - "a gate in src/policies/gating.yaml returns BLOCK"
+      - "confidence < 0.6 on any output that triggers an external side effect"
+
+  - name: marketing_orchestrator
+    domain: marketing
+    single_task: "Drain ops.handoff_queue for target_domain='marketing' and route to marketing sub-agents."
+    owns_write: true
+    data_scope: [core.entity, marketing.campaign, marketing.touch, ops.handoff_queue, ops.audit_log]
+    status: stub   # scaffolded to prove the silo pattern; not built in sprint
+
+# ------------------------------------------------------------------------------
+# SYSTEM AGENTS — domain-independent. KEEP THESE regardless of the problem set.
+# ------------------------------------------------------------------------------
+agents:
+  - name: red_team_agent
+    single_task: "Return a falsification verdict on another agent's output."
+    orchestrator: "*"
+    kind: system
+    inputs: {agent_name: str, claim: str, cited_rows: list}
+    outputs: {verdict: "SUPPORTED|UNSUPPORTED|UNVERIFIABLE", failing_case: str, cite: str}
+    data_scope: [core.*]       # read-only; must re-derive from source, not trust the claim
+    write_scope: []
+    hardcoded_rules:
+      - "Default to UNSUPPORTED when evidence is absent. Absence is not support."
+      - "A claim citing zero rows is UNSUPPORTED regardless of plausibility."
+      - "Never repair the claim. Judge only."
+    escalate_when: ["verdict is UNVERIFIABLE twice for the same claim"]
+    eval_tier: core
+
+  - name: discrepancy_agent
+    single_task: "Locate the source table where two systems disagree about one field."
+    orchestrator: "*"
+    kind: system
+    inputs: {entity_id: str, field: str}
+    outputs: {sources: list, values: list, divergence_point: str, confidence: float}
+    data_scope: [core.entity, core.entity_xref, ops.ingest_log]
+    write_scope: []
+    hardcoded_rules:
+      - "Compare against core.entity as canonical; report deltas, never silently pick a winner."
+      - "If timestamps are not ISO-8601 UTC, normalize before comparing or return INDETERMINATE."
+    escalate_when: ["divergence_point cannot be isolated to a single source"]
+    eval_tier: core
+
+  - name: heuristic_override_agent
+    single_task: "Apply the tribal-knowledge rules in policies/heuristics.yaml to a pending decision."
+    orchestrator: "*"
+    kind: system
+    runs: last            # executes AFTER all domain agents; its output supersedes theirs
+    inputs: {decision: dict, context: dict}
+    outputs: {final_decision: dict, rule_id: str, overridden: bool, rationale: str}
+    data_scope: [core.entity, core.account, ops.audit_log]
+    write_scope: [ops.audit_log]
+    hardcoded_rules:
+      - "Only fires on a rule_id that exists in heuristics.yaml. No improvised exceptions."
+      - "Every override writes rule_id + before/after to ops.audit_log. No silent overrides."
+      - "Two rules matching with opposite outcomes = INDETERMINATE -> human gate."
+    escalate_when: ["conflicting rules match", "rule matches but a precondition field is null"]
+    eval_tier: core
+
+  - name: gate_agent
+    single_task: "Classify an input as PROCEED, ASK, or BLOCK before any work begins."
+    orchestrator: "*"
+    kind: system
+    runs: first
+    inputs: {request: str, context: dict}
+    outputs: {decision: "PROCEED|ASK|BLOCK", clarifying_question: str, matched_rule: str}
+    data_scope: []          # deliberately no data access — it decides, it does not look
+    write_scope: [ops.hitl_queue]
+    hardcoded_rules:
+      - "Ambiguity is not a reason to guess. Under-specified scope returns ASK with ONE question."
+      - "Sensitive categories in gating.yaml return BLOCK regardless of how the request is phrased."
+      - "ASK returns exactly one question, answerable in one line."
+    eval_tier: core
+
+# ------------------------------------------------------------------------------
+# DOMAIN AGENTS — ILLUSTRATIVE ONLY (sales silo). Replace on sprint day.
+# Shown to demonstrate the granularity bar: each is one job, one data scope.
+# ------------------------------------------------------------------------------
+  - name: appointment_setting_agent
+    single_task: "Propose three meeting slots for one contact."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [core.contact, sales.availability, sales.meeting]
+    write_scope: []            # proposes slots; sales_orchestrator commits the hold
+    hardcoded_rules:
+      - "Never propose a slot outside the contact's ISO-3166 region business hours."
+      - "Never double-book an owner_id already held in sales.meeting."
+    escalate_when: ["contact timezone is null or unmappable to ISO-3166"]
+    eval_tier: extended
+
+  - name: call_prep_agent
+    single_task: "Assemble a one-page brief for one scheduled call."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [core.account, sales.opportunity, sales.activity]
+    write_scope: []
+    hardcoded_rules: ["Cite the row id behind every fact in the brief. No uncited claims."]
+    eval_tier: extended
+
+  - name: order_tracking_agent
+    single_task: "Return current fulfillment status for one order id."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [sales.order, sales.shipment]
+    write_scope: []
+    hardcoded_rules: ["Status not in the ISO status enum returns INDETERMINATE, never a guess."]
+    eval_tier: core
+
+  - name: crm_monitor_agent
+    single_task: "Flag CRM records whose required fields went stale past threshold."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [core.entity, sales.opportunity]
+    write_scope: [ops.flag]
+    eval_tier: extended
+
+  - name: email_response_agent
+    single_task: "Draft one reply to one inbound sales email."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [core.contact, sales.activity]
+    write_scope: []           # drafts only; a human sends
+    hardcoded_rules:
+      - "Never state a price, date, or commitment not present in the cited rows."
+      - "Output is a draft. This agent has no send capability by construction."
+    eval_tier: core
+
+  - name: refund_eligibility_agent
+    single_task: "Decide refund eligibility for one order under the written policy."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [sales.order, sales.payment, core.account]
+    write_scope: []
+    hardcoded_rules:
+      - "Apply only the written 30-day policy. Unwritten exceptions are NOT this agent's job."
+      - "Emit the raw eligibility; heuristic_override_agent applies tribal rules downstream."
+    eval_tier: core
+    note: >
+      This is the seam the user's corporate-card example lives on. The written
+      rule and the unwritten rule are deliberately in two different components so
+      the unwritten one is auditable instead of buried in a prompt.
+
+  - name: funnel_cadence_agent
+    single_task: "Determine the next scheduled touch for one opportunity."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [sales.opportunity, sales.activity, sales.cadence_rule]
+    write_scope: []            # proposes the touch; sales_orchestrator commits it
+    eval_tier: extended
+
+  - name: sales_analytics_agent
+    single_task: "Compute one named metric over one date range."
+    orchestrator: sales_orchestrator
+    kind: domain
+    data_scope: [sales.opportunity, sales.order, core.dim_date]
+    write_scope: []
+    hardcoded_rules:
+      - "Metric must exist in docs/coding/DATA_MODEL.md. No inventing definitions."
+      - "Money returns with its ISO-4217 code. A bare number is a defect."
+    eval_tier: core

@@ -1,0 +1,44 @@
+# ==============================================================================
+# retry.yaml — retry is bounded, and exhaustion is LOUD.
+# A silent retry loop that eventually returns something plausible is the worst
+# failure mode in an agent demo. Fail visibly instead.
+# ==============================================================================
+version: 1
+
+defaults:
+  max_attempts: 2            # 1 initial + 1 retry
+  backoff_seconds: [0, 2]
+  timeout_seconds: 45
+
+# Retry only where a retry can plausibly change the outcome.
+retryable:
+  - transient_network_error
+  - rate_limit_429
+  - db_connection_reset
+  - schema_validation_failure   # retry once with the validator error appended
+
+never_retry:
+  - gate_block                  # a BLOCK is a decision, not a failure
+  - permission_denied           # retrying is an escalation attempt
+  - indeterminate_result        # more attempts do not create missing information
+  - heuristic_conflict
+
+on_exhaustion:
+  action: FAIL_LOUD
+  steps:
+    - "Mark the run FAILED. Never emit a partial result as if complete."
+    - "Write ops.failure_log: agent, attempts, last_error, inputs_hash, ts_utc."
+    - "Write ops.hitl_queue with severity='retry_exhausted'."
+    - "Emit notification via channels below."
+    - "Orchestrator returns FAILED for that step and does NOT substitute a default."
+  notification:
+    channels: [stderr, ops.failure_log, slack_webhook]
+    slack_webhook_env: SLACK_FAILURE_WEBHOOK    # optional; absent = stderr only
+    template: >
+      FAIL [{agent}] after {attempts} attempts. Last error: {last_error}.
+      Run {run_id} halted at step {step}. HITL row {hitl_id}. No fallback applied.
+
+prohibitions:
+  - "Never retry with a loosened schema to force a pass."
+  - "Never swap to a weaker validation on the final attempt."
+  - "Never return a cached or default value labeled as a fresh result."

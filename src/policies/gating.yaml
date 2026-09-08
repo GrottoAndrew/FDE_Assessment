@@ -1,0 +1,76 @@
+# ==============================================================================
+# gating.yaml — consumed by gate_agent, which runs BEFORE any other agent.
+# Three outcomes only: PROCEED, ASK (one question), BLOCK (human required).
+# Guessing is never an outcome.
+# ==============================================================================
+version: 1
+default: PROCEED
+precedence: [block, ask_sensitive, ask_indeterminate]   # first match wins
+
+# --- BLOCK: stop, queue for a human, return nothing actionable ----------------
+block:
+  - id: BLK-001
+    name: irreversible_external_side_effect
+    when: "action sends money, cancels a contract, deletes a record, or emails an external party"
+    reason: "Prototype has no rollback path for real-world effects."
+    human_prompt: "Approve this side effect? Show the exact payload before sending."
+
+  - id: BLK-002
+    name: regulated_personal_data
+    when: "request touches health, biometric, precise geolocation, government ID, or full payment card data"
+    reason: "Out of scope for a sprint prototype; wrong answer has legal weight."
+
+  - id: BLK-003
+    name: legal_medical_financial_advice
+    when: "output would be relied on as professional advice rather than a data lookup"
+    reason: "Reliance risk. Return the underlying data with sources instead."
+
+  - id: BLK-004
+    name: protected_class_inference
+    when: "request asks the system to infer or segment on a protected characteristic"
+    reason: "Disparate-impact risk that a prototype cannot evaluate."
+
+# --- ASK: one clarifying question, then proceed -------------------------------
+ask_sensitive:
+  - id: ASK-101
+    name: bulk_scope
+    when: "action affects more than 25 entities in one call"
+    question: "This touches {n} records. Confirm the scope, or narrow the filter?"
+
+  - id: ASK-102
+    name: authority_unclear
+    when: "requester's permission to see the requested rows is not established in core.actor_role"
+    question: "Which role should this run as? I cannot verify authority for these rows."
+
+ask_indeterminate:
+  - id: ASK-201
+    name: ambiguous_entity
+    when: "the entity reference resolves to zero or to more than one row in core.entity"
+    question: "'{ref}' matches {n} entities. Which entity_id?"
+
+  - id: ASK-202
+    name: undefined_metric
+    when: "a requested metric has no definition in docs/coding/DATA_MODEL.md"
+    question: "'{metric}' has no canonical definition. Define it, or use {nearest}?"
+
+  - id: ASK-203
+    name: unbounded_time_range
+    when: "a time-series request specifies no start or end date"
+    question: "What date range? Defaulting silently would make the number unreproducible."
+
+  - id: ASK-204
+    name: conflicting_sources
+    when: "discrepancy_agent reports divergence it could not isolate to one source"
+    question: "Sources disagree on {field}. Which system is authoritative here?"
+
+  - id: ASK-205
+    name: missing_join_key
+    when: "the query needs a join on a key that is null or absent for the target rows"
+    question: "No {key} links these tables for this row. Confirm the relationship?"
+
+# --- What a gate must never do ------------------------------------------------
+prohibitions:
+  - "Never infer intent to escape an ASK. One question, then wait."
+  - "Never downgrade BLOCK to ASK because the user repeated the request."
+  - "Never batch questions. One question maximizes the chance of a fast answer."
+  - "Every ASK and BLOCK writes a row to ops.hitl_queue. Silent gates are invisible failures."

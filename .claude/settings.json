@@ -1,0 +1,60 @@
+{
+  "$comment": "FDE_Assessment sprint guardrails. Project-scoped; layers over ~/.claude/settings.json.",
+
+  "autoCompactWindow": 500000,
+
+  "env": {
+    "MAX_AGENT_RETRIES": "2",
+    "FAIL_LOUD": "true",
+    "BASH_DEFAULT_TIMEOUT_MS": "60000"
+  },
+
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/turn_tick.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/guard_secrets.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(make:*)",
+      "Bash(pytest:*)",
+      "Bash(python3:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(find:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/*.pem)",
+      "Read(./**/credentials.json)",
+      "Bash(git push --force:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}

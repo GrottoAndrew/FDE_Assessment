@@ -1,0 +1,74 @@
+# ==============================================================================
+# heuristics.yaml — the unwritten rules, written down.
+#
+# These encode tribal knowledge that legitimately overrides the documented
+# policy. They live here rather than inside an agent prompt for three reasons:
+# they are auditable, they are testable, and they can be shown to a domain
+# expert for sign-off without reading any code.
+#
+# heuristic_override_agent runs LAST and its verdict supersedes domain agents.
+# Every fire writes rule_id + before/after to ops.audit_log.
+#
+# The rules below are ILLUSTRATIVE (matching the user's stated example).
+# On sprint day these come from the interviewer's domain brief.
+# ==============================================================================
+version: 1
+
+rules:
+  - id: HEU-001
+    name: corporate_card_refund_grace
+    supersedes: refund_eligibility_agent
+    when:
+      all:
+        - "decision.eligible == false"
+        - "decision.reason == 'outside_30_day_window'"
+        - "context.payment.instrument_type == 'corporate_credit_card'"
+        - "context.order.age_days <= 90"
+    then:
+      eligible: true
+      reason: "corporate_card_grace"
+    rationale: >
+      CSRs process these regardless of the window because chargeback cost and
+      account-relationship cost both exceed the refund. Documented policy says
+      30 days; actual practice says corporate cards get 90.
+    owner: "CS lead"
+    confidence: high
+    audit: required
+
+  - id: HEU-002
+    name: strategic_account_escalation
+    supersedes: funnel_cadence_agent
+    when:
+      all:
+        - "context.account.tier == 'strategic'"
+        - "decision.next_touch_channel == 'automated_email'"
+    then:
+      next_touch_channel: "owner_direct"
+    rationale: "Strategic accounts churn on automated touches. Named owner reaches out."
+    owner: "VP Sales"
+    confidence: medium
+    audit: required
+
+  - id: HEU-003
+    name: never_override_a_block
+    supersedes: "*"
+    when:
+      all: ["gate.decision == 'BLOCK'"]
+    then:
+      halt: true
+    rationale: >
+      Ceiling rule. Heuristics may loosen business policy; they may never loosen
+      a safety gate. Without this, tribal knowledge becomes a jailbreak.
+    owner: system
+    confidence: absolute
+    audit: required
+
+conflict_policy:
+  on_multiple_matches_same_outcome: "apply highest-confidence rule, log all matched ids"
+  on_multiple_matches_opposite_outcome: "INDETERMINATE -> ops.hitl_queue, apply nothing"
+  on_precondition_null: "INDETERMINATE -> ops.hitl_queue, apply nothing"
+
+authoring_rules:
+  - "A rule with no named owner is not a rule. It is a guess. Delete it."
+  - "Every rule needs a golden-set case proving it fires and one proving it does not."
+  - "Rules narrow to a condition set. 'Use judgment' is not a condition."
