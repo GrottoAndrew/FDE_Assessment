@@ -8,8 +8,25 @@ Verified live on 2026-09-08. Re-run the verification block the morning of.
 |---|---|---|---|
 | 1 | **GitHub** `GrottoAndrew/FDE_Assessment` | ✅ connected, pushed, tracking `origin/main` | none |
 | 2 | **`ANTHROPIC_API_KEY`** in `.env` | ⚠️ this org mints **org-scoped** keys by default, and those 400 on every call | create the sprint key *inside a workspace* — see below |
-| 3 | **A live Postgres** for the canonical + ISO schema | ✅ dedicated Supabase project `krnkvkunhwwfdqeqnikg` wired via project-scoped MCP | authenticate it once — see below |
+| 3 | **A live Postgres** | ✅ **local pg18 running, all 3 schema files applied, verified** | none — `DATABASE_URL=postgresql://localhost:5432/fde` |
 | 4 | **Python venv** | ✅ `.venv` built, pytest + pyyaml installed | none |
+
+### Postgres is LIVE (local)
+
+`brew services start postgresql@18` is running; database `fde` has all 15 tables,
+`core.v_entity_resolved`, 5 agent roles, and RLS on 3 tables. ISO seed verified
+(9 currencies, 10 countries).
+
+**`psql` is keg-only and not on your PATH.** For a manual shell:
+
+    export PATH="/opt/homebrew/opt/postgresql@18/bin:$PATH"
+
+`preflight.py` locates it automatically, so `make preflight` works either way.
+
+Supabase remains configured in `.mcp.json` as a fallback but is **not needed** —
+the local database is the primary. Do not spend sprint minutes on its OAuth.
+
+<details><summary>Original Supabase setup notes</summary>
 
 ### On item 3 — the dedicated Supabase project
 
@@ -53,11 +70,7 @@ Then apply the schema. Either through the MCP (`apply_migration`) or directly:
    `current_setting('app.agent_name')`, set by the runtime per invocation, not on
    a JWT claim.
 
-**Fallback if the project is unreachable on the day:** local Postgres, zero
-network dependency. Have this ready as plan B.
-
-    brew install postgresql@17 && brew services start postgresql@17
-    createdb fde && export DATABASE_URL="postgresql://localhost:5432/fde"
+</details>
 
 ### On item 2 — create the key inside a workspace
 

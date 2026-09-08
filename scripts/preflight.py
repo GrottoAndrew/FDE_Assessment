@@ -35,8 +35,16 @@ def env(key: str) -> str:
     return ""
 
 
+# Homebrew postgres is keg-only, so psql is not on PATH by default.
+_PG = [p for p in Path("/opt/homebrew/opt").glob("postgresql@*/bin") if p.is_dir()]
+_ENV = {**os.environ,
+        "PATH": os.pathsep.join([*(str(p) for p in sorted(_PG, reverse=True)),
+                                 os.environ.get("PATH", "")])}
+
+
 def sh(cmd: str) -> tuple[int, str]:
-    r = subprocess.run(cmd, cwd=ROOT, shell=True, capture_output=True, text=True)
+    r = subprocess.run(cmd, cwd=ROOT, shell=True, capture_output=True,
+                       text=True, env=_ENV)
     return r.returncode, (r.stdout + r.stderr).strip()
 
 

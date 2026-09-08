@@ -11,7 +11,8 @@
 
 CREATE SCHEMA IF NOT EXISTS core;
 CREATE SCHEMA IF NOT EXISTS ops;
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";   -- gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS "citext";     -- case-insensitive email
 
 -- ---------------------------------------------------------------------------
 -- CANONICAL ENTITY — the join target for everything

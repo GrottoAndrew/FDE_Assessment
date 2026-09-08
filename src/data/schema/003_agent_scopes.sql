@@ -58,17 +58,27 @@ GRANT INSERT ON ops.audit_log, ops.hitl_queue TO agent_heuristic;
 -- --- DOMAIN AGENTS (illustrative; regenerate from the registry) -------------
 -- Pattern: SELECT only on the tables in data_scope; INSERT only on write_scope.
 
-SELECT ops.ensure_role('agent_order_tracking');
-GRANT agent_base TO agent_order_tracking;
-GRANT USAGE ON SCHEMA sales TO agent_order_tracking;
-GRANT SELECT ON sales.order, sales.shipment TO agent_order_tracking;
--- no core.*, no ops.*, no writes: it answers one question about one order
+-- These reference the domain schema, which does not exist until sprint day.
+-- Guarded so 003 applies cleanly against a bare canonical layer; the grants
+-- land automatically once 004_domain.sql has been applied.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'sales') THEN
+        PERFORM ops.ensure_role('agent_order_tracking');
+        EXECUTE 'GRANT agent_base TO agent_order_tracking';
+        EXECUTE 'GRANT USAGE ON SCHEMA sales TO agent_order_tracking';
+        EXECUTE 'GRANT SELECT ON sales.order, sales.shipment TO agent_order_tracking';
+        -- no core.*, no ops.*, no writes: it answers one question about one order
 
-SELECT ops.ensure_role('agent_email_response');
-GRANT agent_base TO agent_email_response;
-GRANT USAGE ON SCHEMA core, sales TO agent_email_response;
-GRANT SELECT ON core.contact, sales.activity TO agent_email_response;
--- no INSERT anywhere: this agent structurally cannot send. A human sends.
+        PERFORM ops.ensure_role('agent_email_response');
+        EXECUTE 'GRANT agent_base TO agent_email_response';
+        EXECUTE 'GRANT USAGE ON SCHEMA core, sales TO agent_email_response';
+        EXECUTE 'GRANT SELECT ON core.contact, sales.activity TO agent_email_response';
+        -- no INSERT anywhere: this agent structurally cannot send. A human sends.
+    ELSE
+        RAISE NOTICE 'sales schema absent - domain agent roles deferred until 004_domain.sql';
+    END IF;
+END $$;
 
 -- --- Row-level security: scope agents to the rows, not just the tables ------
 ALTER TABLE core.entity        ENABLE ROW LEVEL SECURITY;
