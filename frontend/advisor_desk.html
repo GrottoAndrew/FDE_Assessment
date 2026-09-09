@@ -884,25 +884,43 @@ function renderRail(){
 }
 
 /* --- Entity resolution --------------------------------------------------- */
-/* Thirteen S&P 500 tickers are also ordinary English words. Matching a bare
+/* Many S&P 500 tickers are also ordinary English words. Matching a bare
    lowercase one turns "Why is it down today?" into a question about Gartner (IT)
    and "what is that worth right now?" into ServiceNow (NOW). Caught by a headless
    run of this page, not by reading it. A lowercase homograph is only a ticker
-   when the advisor typed it as one; uppercase or $-prefixed always counts. */
-const HOMOGRAPHS = new Set(["A","ALL","ARE","COST","FIX","HAS","IT","KEY","LOW","NOW","ON","SO","WELL"]);
+   when the advisor typed it as one; uppercase or $-prefixed always counts.
+
+   The first list was thirteen names. Left-to-right first-hit then rebound the
+   rail: "how fast is NVDA moving?" became Fastenal, "I met with the client,
+   what's NVDA trading at?" became MetLife, and "why is the Dow down?" became
+   Dow Inc. Prefer a token the advisor typed as a ticker, and keep the
+   English-word set complete enough that a lowercase-only question still binds
+   to the pinned symbol rather than a coincidental constituent. */
+const HOMOGRAPHS = new Set([
+  "A","ALL","ARE","COST","FIX","HAS","IT","KEY","LOW","NOW","ON","SO","WELL",
+  "AMP","APP","BALL","BEN","BRO","C","CAT","COO","COP","D","DASH","DOC","DOW",
+  "ECHO","F","FAST","FLEX","FOX","GEN","HOOD","ICE","IR","J","L","LITE","MA",
+  "MET","MO","O","PM","T","TAP","TECH","USB","V"
+]);
 
 function resolve(text){
   const raw = text.split(/[^A-Za-z0-9$.\-]+/).filter(Boolean);
   const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  // 1. An exact index ticker anywhere in the question wins outright.
+  // 1. Tickers. An ALL-CAPS or $prefixed token is a ticker the advisor named.
+  // A lowercase hit is only kept if it is not an English-word constituent, and
+  // it never beats a typed ticker later in the same question.
+  let fallback = null;
   for (const w of raw){
     const bare = w.replace(/^\$/, "");
     const t = bare.toUpperCase();
     if (!SP_BY_TICKER[t]) continue;
     const typedAsTicker = w.startsWith("$") || bare === t;   // "$IT" or "IT", not "it"
     if (HOMOGRAPHS.has(t) && !typedAsTicker) continue;
-    return {matched:t, kind:"ticker", conf:0.990, sp:SP_BY_TICKER[t]};
+    const hit = {matched:t, kind:"ticker", conf:0.990, sp:SP_BY_TICKER[t]};
+    if (typedAsTicker) return hit;
+    if (!fallback) fallback = hit;
   }
+  if (fallback) return fallback;
   // 2. Otherwise the seeded synonym table, longest phrase first.
   for (let n = 3; n >= 1; n--){
     for (let i = 0; i + n <= words.length; i++){
