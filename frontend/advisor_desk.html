@@ -913,9 +913,26 @@ function resolve(text){
     }
   }
   // 3. An index constituent named in full ("Advanced Micro Devices").
-  const flat = norm(text);
-  const byName = SP500.find(r => r[1].length > 4 && flat.includes(norm(r[1])));
-  if (byName) return {matched: byName[1], kind:"legal_name", conf:0.950, sp: SP_BY_TICKER[byName[0]]};
+  // Consecutive tokens must equal the whole name, longest phrase first.
+  // flat.includes(norm(name)) rebound the rail: "Intuitive Surgical" became
+  // Intuit, "cost comparison" became Costco, "intelligence" became Intel.
+  // A one-word name of 6 letters or fewer ("Intel", "FedEx") only counts when
+  // the advisor typed it as a name — same rule as the ticker homographs.
+  for (let n = Math.min(8, raw.length); n >= 1; n--){
+    for (let i = 0; i + n <= raw.length; i++){
+      const slice = raw.slice(i, i + n);
+      const k = norm(slice.join(""));
+      if (!k) continue;
+      const row = SP500.find(r => r[1].length > 4 && norm(r[1]) === k);
+      if (!row) continue;
+      if (n === 1 && row[1].length <= 6){
+        const w = slice[0];
+        const typedAsName = w.startsWith("$") || /[A-Z]/.test(w);
+        if (!typedAsName) continue;
+      }
+      return {matched: row[1], kind:"legal_name", conf:0.950, sp: SP_BY_TICKER[row[0]]};
+    }
+  }
   return null;
 }
 
