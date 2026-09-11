@@ -1149,6 +1149,25 @@ function answer(text){
     }
 
     case "resolution": {
+      // The synonym table is seeded for NVDA only. Dumping it after setActive()
+      // has already pinned a different issuer attributed NVIDIA's CIK to AMD
+      // ("resolve AMD to its CIK") and Intel ("canonical identifier for Intel"):
+      // the rail named the right company, the body named the wrong one.
+      if (!seeded) {
+        rules.push(`${ACTIVE.ticker}: resolved from S&P 500 membership \u2192 CIK ${ACTIVE.cik}`);
+        rules.push("synonym table: NVDA only \u2192 not applied to a different issuer");
+        return {rules, html:`${subject()}${disclosure}<span class="verdict v-ok">ANSWER</span>
+          <p><b>${ACTIVE.ticker}</b> resolves to <b>${ACTIVE.name}</b>, CIK
+            <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a>
+            (${ACTIVE.sector}), from the S&amp;P 500 membership table. That CIK is the
+            canonical issuer id in this system, and the EDGAR link above is live.</p>
+          <p>The misspelling / phonetic / exchange-qualified synonym table is seeded for
+            NVDA only. Applying NVIDIA's variants to <b>${ACTIVE.name}</b> would resolve
+            the wrong issuer, so I will not.</p>
+          <div class="cite"><b>resolved from</b> S&amp;P 500 index membership \u00b7
+            <b>canonical id</b> CIK ${ACTIVE.cik} \u00b7
+            <b>synonyms</b> none on file for this issuer</div>`};
+      }
       rules.push(`core.resolve_entity: ${SYNONYMS.length} synonyms \u2192 1 canonical id`);
       // Every variant collapses to the same CIK. The page shows the canonical
       // record and the CONFIDENCE each variant carries — never the variant
@@ -1159,22 +1178,22 @@ function answer(text){
         .sort((a, b) => b[1] - a[1])
         .map(([k, n]) => `${n} ${k.replace(/_/g, " ")}${n > 1 ? "s" : ""}`).join(", ");
       const low = SYNONYMS.filter(x => x[2] < 0.90).length;
-      return {rules, html:`${subject()}<span class="verdict v-ok">ANSWER</span>
+      return {rules, html:`${subject()}${disclosure}<span class="verdict v-ok">ANSWER</span>
         <p><b>${SYNONYMS.length} recorded variants</b> \u2014 legal name, short names, the
         exchange-qualified ticker, eleven misspellings and two phonetic forms \u2014 all resolve to
         one canonical identifier: <b>CIK
-        <a class="filing-lnk" href="${edgarIssuer(QUOTE.cik)}" target="_blank" rel="noopener noreferrer">${QUOTE.cik}</a></b>,
-        ${QUOTE.name}. Variants are matched on a normalized form and are <b>never displayed as
+        <a class="filing-lnk" href="${edgarIssuer(ACTIVE.cik)}" target="_blank" rel="noopener noreferrer">${ACTIVE.cik}</a></b>,
+        ${ACTIVE.name}. Variants are matched on a normalized form and are <b>never displayed as
         the name</b> \u2014 you always see the canonical record.</p>
-        <p>Type any of them into the box and the desk answers about ${QUOTE.name} \u2014 but it
-        answers <i>as</i> ${QUOTE.name}, and below 0.90 confidence it tells you it made a
+        <p>Type any of them into the box and the desk answers about ${ACTIVE.name} \u2014 but it
+        answers <i>as</i> ${ACTIVE.name}, and below 0.90 confidence it tells you it made a
         provisional match rather than applying one silently.</p>
         <p>On file: ${kinds}. Of those, <b>${low}</b> sit below the 0.90 confidence line, so the
         desk tells you it made a provisional match instead of applying one silently.</p>
         <p>Deliberately <b>absent</b>: <code>TRT:NVDA</code>, the Toronto-listed
         CAD-hedged CDR. It shares the ticker and is a different instrument. A synonym table that
         swallows it is worse than no synonym table.</p>
-        <div class="cite"><b>source</b> firm security master \u00b7 <b>canonical id</b> CIK ${QUOTE.cik}</div>`};
+        <div class="cite"><b>source</b> firm security master \u00b7 <b>canonical id</b> CIK ${ACTIVE.cik}</div>`};
     }
 
     default:
