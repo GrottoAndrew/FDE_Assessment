@@ -894,13 +894,30 @@ const HOMOGRAPHS = new Set(["A","ALL","ARE","COST","FIX","HAS","IT","KEY","LOW",
 function resolve(text){
   const raw = text.split(/[^A-Za-z0-9$.\-]+/).filter(Boolean);
   const words = text.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  // 1. An exact index ticker anywhere in the question wins outright.
+  // A shorter ticker that is only a token of a longer index name is not the
+  // issuer the advisor named. Left-to-right first-hit rebound the rail:
+  // "What is GE Vernova trading at?" became GE Aerospace (CIK 0000040545, not
+  // 0001996810), "T Rowe Price" became AT&T, and "A O Smith" became Agilent.
+  const flat = norm(text);
+  let named = null, namedLen = 0;
+  for (const r of SP500){
+    const n = norm(r[1]);
+    if (n.length > 4 && flat.includes(n) && n.length > namedLen){
+      named = r; namedLen = n.length;
+    }
+  }
+  const namedTokens = named
+    ? named[1].split(/[^A-Za-z0-9]+/).filter(Boolean).map(s => s.replace(/\./g, "").toUpperCase())
+    : [];
+  // 1. An exact index ticker anywhere in the question wins outright —
+  //    unless it is just a name-token of a more specific constituent.
   for (const w of raw){
     const bare = w.replace(/^\$/, "");
     const t = bare.toUpperCase();
     if (!SP_BY_TICKER[t]) continue;
     const typedAsTicker = w.startsWith("$") || bare === t;   // "$IT" or "IT", not "it"
     if (HOMOGRAPHS.has(t) && !typedAsTicker) continue;
+    if (named && named[0] !== t && namedTokens.includes(t)) continue;
     return {matched:t, kind:"ticker", conf:0.990, sp:SP_BY_TICKER[t]};
   }
   // 2. Otherwise the seeded synonym table, longest phrase first.
@@ -913,9 +930,7 @@ function resolve(text){
     }
   }
   // 3. An index constituent named in full ("Advanced Micro Devices").
-  const flat = norm(text);
-  const byName = SP500.find(r => r[1].length > 4 && flat.includes(norm(r[1])));
-  if (byName) return {matched: byName[1], kind:"legal_name", conf:0.950, sp: SP_BY_TICKER[byName[0]]};
+  if (named) return {matched: named[1], kind:"legal_name", conf:0.950, sp: SP_BY_TICKER[named[0]]};
   return null;
 }
 
