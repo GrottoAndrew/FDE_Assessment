@@ -924,7 +924,14 @@ function resolve(text){
 function classify(t){
   const s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
-  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
+  // BLK-003 is a recommendation, not a trade verb. Bare \bbuy\b / \bsell\b
+  // matched "I want to buy NVDA, what's it trading at?" and "Don't sell NVDA,
+  // just quote it" and returned CANNOT ANSWER instead of the last print — the
+  // whole reason this desk exists. Keep should/recommend/suitable/good idea.
+  // A bare buy/sell with no recommendation cue is advice only when the
+  // question is not also asking for a quote.
+  if (/\b(should|recommend|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
+  if (/\b(buy|sell)\b/.test(s) && !/\b(pric(e|es|ing)|quotes?|trad(e|es|ing)|last|current|now|bid|ask)\b/.test(s)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
