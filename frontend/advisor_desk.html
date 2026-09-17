@@ -927,7 +927,10 @@ function classify(t){
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
-  if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
+  // The session close is "close" / "closing". close[ds]? also matched closed/
+  // closes, so "I closed the ticket, what's NVDA trading at?" returned Orion's
+  // T-1 close (and account ORI-4471) instead of the last print.
+  if (/\b(prior|previous|yesterday|last night|closing|close)\b/.test(s))               return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
   if (/\b(filings?|filed|8-?k|10-?[kq]|13[dfghq]|insiders?|form ?[345]|sec|edgar|ownership|accession)\b/.test(s)) return "filings";
   if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(s)) return "news";
