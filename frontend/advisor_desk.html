@@ -927,7 +927,17 @@ function classify(t){
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
-  if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
+  // The session close is "close" / "yesterday's close". Bare "last night"
+  // also matched "I asked last night", so "I asked last night, what's NVDA
+  // trading at?" returned Orion's T-1 close (and account ORI-4471) instead
+  // of the last print. Keep last night only when the question is not also
+  // asking for a quote. Strip the phrase before testing for "last", or the
+  // word inside "last night" itself would look like a last-print request.
+  if (/\b(prior|previous|yesterday|close[ds]?)\b/.test(s)
+      || (/\blast night\b/.test(s)
+          && !/\b(pric(e|es|ing)|quotes?|trad(e|es|ing)|last|current|now)\b/.test(
+                s.replace(/\blast night\b/g, " "))))
+                                                                                     return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
   if (/\b(filings?|filed|8-?k|10-?[kq]|13[dfghq]|insiders?|form ?[345]|sec|edgar|ownership|accession)\b/.test(s)) return "filings";
   if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(s)) return "news";
