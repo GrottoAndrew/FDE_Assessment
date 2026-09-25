@@ -930,8 +930,15 @@ function classify(t){
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
   if (/\b(filings?|filed|8-?k|10-?[kq]|13[dfghq]|insiders?|form ?[345]|sec|edgar|ownership|accession)\b/.test(s)) return "filings";
-  if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(s)) return "news";
-  if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s))   return "price";
+  // "up" is a move direction. Bare \bup\b also matched the particle in
+  // "look up" / "heads up" / "up to", so "Can you look up NVDA's last?"
+  // and "What's NVDA up to?" returned a MOVE/CAUSE dump (Form 4) instead
+  // of the delayed last. Strip those idioms before the news test; treat
+  // "up to" / "look up" as last-print requests. Genuine "is it up?" /
+  // "why is it down today?" still route to news.
+  const newsSrc = s.replace(/\b(look[\s-]?up|heads[\s-]?up|up to)\b/g, " ");
+  if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(newsSrc)) return "news";
+  if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now|up to|look[\s-]?up)\b/.test(s))   return "price";
   return "unknown";
 }
 
