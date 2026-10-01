@@ -930,7 +930,20 @@ function classify(t){
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
   if (/\b(filings?|filed|8-?k|10-?[kq]|13[dfghq]|insiders?|form ?[345]|sec|edgar|ownership|accession)\b/.test(s)) return "filings";
-  if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(s)) return "news";
+  // "why" is a cause question. Bare \bwhy\b also matched the filler in
+  // "that's why I asked", "why don't you", and the hesitation "Why,",
+  // so "That's why I asked, what's NVDA trading at?" and
+  // "Why, what's NVDA trading at?" returned a MOVE/CAUSE dump (Form 4)
+  // instead of the delayed last. Strip those idioms before the news
+  // test. Genuine "Why is it down today?" / "why did NVDA drop?" still
+  // route to news.
+  const newsSrc = s.replace(/\bthat'?s why\b/g, " ")
+                   .replace(/\bthat is why\b/g, " ")
+                   .replace(/\b(?:the )?reason why\b/g, " ")
+                   .replace(/\bwhy don'?t you\b/g, " ")
+                   .replace(/\bwhy not\b/g, " ")
+                   .replace(/\bwhy[,.:?]/g, " ");
+  if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(newsSrc)) return "news";
   if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s))   return "price";
   return "unknown";
 }
