@@ -930,7 +930,18 @@ function classify(t){
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
   if (/\b(filings?|filed|8-?k|10-?[kq]|13[dfghq]|insiders?|form ?[345]|sec|edgar|ownership|accession)\b/.test(s)) return "filings";
-  if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(s)) return "news";
+  // "news" is a cause question. Bare \bnews\b also matched the context in
+  // "I saw the news" / "after the news" / "given the news", so
+  // "I saw the news, what's NVDA trading at?" returned a MOVE/CAUSE dump
+  // (Form 4) instead of the delayed last. When the question is also a
+  // last-print request, strip those idioms. Genuine "Any news on NVDA?"
+  // / "What's the news?" still route to news.
+  const newsSrc = (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)
+    ? s.replace(/\b(saw|heard|read|got)\s+(the\s+)?news\b/g, " ")
+       .replace(/\b(after|given|despite)\s+(the\s+)?news\b/g, " ")
+       .replace(/\bin\s+the\s+news\b/g, " ")
+    : s);
+  if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(newsSrc)) return "news";
   if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s))   return "price";
   return "unknown";
 }
