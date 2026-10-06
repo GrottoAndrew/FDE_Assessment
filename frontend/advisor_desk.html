@@ -925,7 +925,19 @@ function classify(t){
   const s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
-  if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
+  // BLK-005 is output formatted to send to a client — not any sentence that
+  // mentions an email. Bare \bemail\b also matched the context in
+  // "I got an email" / "after the email" / "given the email", so
+  // "I got an email, what's NVDA trading at?" returned INTERNAL USE ONLY
+  // instead of the delayed last. When the question is also a last-print
+  // request, strip those idioms. Genuine "Draft this as an email to my
+  // client" / "Email this to my client" still route to clientfacing.
+  const clientSrc = (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)
+    ? s.replace(/\b(saw|heard|read|got|received)\s+(an?\s+|the\s+)?email\b/g, " ")
+       .replace(/\b(after|given|despite)\s+(the\s+|an?\s+)?email\b/g, " ")
+       .replace(/\bin\s+(the\s+|an?\s+)?email\b/g, " ")
+    : s);
+  if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(clientSrc))         return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
