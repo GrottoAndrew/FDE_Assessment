@@ -925,7 +925,18 @@ function classify(t){
   const s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
-  if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
+  // BLK-005 is output formatted to send to a client — not a sentence that
+  // mentions having drafted a note. Bare draft.*(note|letter) also matched
+  // "I drafted a note" / "I drafted a letter", so
+  // "I drafted a note, what's NVDA trading at?" returned INTERNAL USE ONLY
+  // instead of the delayed last. When the question is also a last-print
+  // request, strip those idioms. Genuine "Draft this as a note to my client"
+  // / "Draft this as an email to my client" still route to clientfacing.
+  const clientSrc = (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)
+    ? s.replace(/\b(i\s+)?(have\s+|just\s+|already\s+)?drafted\s+(a\s+|the\s+|this\s+)?(note|letter)\b/g, " ")
+       .replace(/\b(after|once|before|when)\s+(i\s+)?drafted\b/g, " ")
+    : s);
+  if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(clientSrc))         return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
