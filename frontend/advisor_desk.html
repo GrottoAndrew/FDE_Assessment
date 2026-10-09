@@ -924,7 +924,21 @@ function resolve(text){
 function classify(t){
   const s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
-  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
+  // BLK-003 is a recommendation. Bare \bshould\b also matched
+  // expectation ("should be around 226") and conversational
+  // "I should check" / "Should I wait" / hesitation "Should I,",
+  // so "I should check, what's NVDA trading at?" returned CANNOT ANSWER
+  // instead of the delayed last. When the question is also a last-print
+  // request, strip those idioms. Genuine "Should my client buy more NVDA?"
+  // still routes to advice.
+  const adviceSrc = (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)
+    ? s.replace(/\bi\s+should\s+(check|look|ask|know|mention|pull|see|wait)\b/g, " ")
+       .replace(/\bshould\s+i\s+(check|look|ask|wait|see)\b/g, " ")
+       .replace(/\bshould\s+be\b/g, " ")
+       .replace(/\bshould\s+i[,.?]/g, " ")
+       .replace(/\bi\s+should[,.]/g, " ")
+    : s);
+  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(adviceSrc)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
