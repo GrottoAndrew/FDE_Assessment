@@ -924,7 +924,21 @@ function resolve(text){
 function classify(t){
   const s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
-  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
+  // BLK-003 is a recommendation. Bare "good idea" also matched
+  // conversational acknowledgment ("Good idea, what's NVDA
+  // trading at?" / "That's a good idea") so the desk returned
+  // CANNOT ANSWER instead of the delayed last. When the
+  // question is also a last-print request, strip those idioms.
+  // Genuine "Is NVDA a good idea?" still routes to advice.
+  const adviceSrc = (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)
+    ? s.replace(/\b(?:that(?:'s| is)|it(?:'s| is)|sounds?(?:\s+like)?|sounded like)\s+a\s+good idea\b/g, " ")
+       .replace(/\b(?:i thought it was|thought it was)\s+a\s+good idea\b/g, " ")
+       .replace(/\b(?:is|was|were)\s+a\s+good idea\b/g, " ")
+       .replace(/\bgood idea\s+to\s+(?:check(?:ing)?|look(?:ing)?|see(?:ing)?|ask(?:ing)?|know|mention(?:ing)?|pull(?:ing)?|wait(?:ing)?)\b/g, " ")
+       .replace(/^(?:a\s+)?good idea\s*[,.\u2014:;]\s*/g, " ")
+       .replace(/[.!?]\s+(?:a\s+)?good idea\s*[.!]?\s*$/g, "")
+    : s);
+  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(adviceSrc)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
