@@ -924,7 +924,22 @@ function resolve(text){
 function classify(t){
   const s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
-  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
+  // BLK-003 is a recommendation. Bare "suitable" also matched
+  // conversational acknowledgment ("That's suitable, what's NVDA
+  // trading at?" / "Suitable,") and "a suitable time/check", so
+  // the desk returned CANNOT ANSWER instead of the delayed last.
+  // When the question is also a last-print request, strip those
+  // idioms. Genuine "Is NVDA suitable?" still routes to advice.
+  const adviceSrc = (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)
+    ? s.replace(/\b(?:that(?:'s| is)|it(?:'s| is)|sounds?(?:\s+like)?|sounded like)\s+(?:a\s+)?suitable\b/g, " ")
+       .replace(/\b(?:i thought it was|thought it was)\s+(?:a\s+)?suitable\b/g, " ")
+       .replace(/\b(?:checking|looking|asking|waiting)\s+(?:\S+\s+){0,3}is\s+suitable\b/g, " ")
+       .replace(/\ba\s+suitable\s+(?:time|moment|check(?:ing)?|look(?:ing)?)\b/g, " ")
+       .replace(/\bsuitable\s+to\s+(?:check(?:ing)?|look(?:ing)?|see(?:ing)?|ask(?:ing)?|know|mention(?:ing)?|pull(?:ing)?|wait(?:ing)?)\b/g, " ")
+       .replace(/^(?:a\s+)?suitable\s*[,.\u2014:;]\s*/g, " ")
+       .replace(/[.!?]\s+(?:a\s+)?suitable\s*[.!]?\s*$/g, "")
+    : s);
+  if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(adviceSrc)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
