@@ -922,8 +922,23 @@ function resolve(text){
 /* One intent per question. Order matters: the refusals are checked before the
    answers, so a request that must be blocked cannot fall through to a price. */
 function classify(t){
-  const s = t.toLowerCase();
+  let s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
+  // BLK-003 is a recommendation. Bare "worth it" also matched
+  // conversational acknowledgment ("That's worth it, what's NVDA
+  // trading at?" / "Worth it,") and "worth it to check", so
+  // the desk returned CANNOT ANSWER instead of the delayed last.
+  // The strip is applied to the working string: leftover \bworth\b
+  // would otherwise match position and disclose the Wilson Family
+  // Trust holding. Genuine "Is NVDA worth buying?" still routes
+  // to advice.
+  if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)) {
+    s = s.replace(/\b(?:that(?:'s| is)|it(?:'s| is)|sounds?(?:\s+like)?|sounded like)\s+worth\s+it\b/g, " ")
+         .replace(/\b(?:i thought it was|thought it was)\s+worth\s+it\b/g, " ")
+         .replace(/\bworth\s+it\s+to\s+(?:check(?:ing)?|look(?:ing)?|see(?:ing)?|ask(?:ing)?|know|mention(?:ing)?|pull(?:ing)?|wait(?:ing)?)\b/g, " ")
+         .replace(/^worth\s+it\s*[,.\u2014:;]\s*/g, " ")
+         .replace(/[.!?]\s+worth\s+it\s*[.!]?\s*$/g, "");
+  }
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
