@@ -922,12 +922,27 @@ function resolve(text){
 /* One intent per question. Order matters: the refusals are checked before the
    answers, so a request that must be blocked cannot fall through to a price. */
 function classify(t){
-  const s = t.toLowerCase();
+  let s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
+  // Position nouns are holdings/notional/value. Bare \bnotional\b also
+  // matched conversational dismissal ("That's notional, what's NVDA
+  // trading at?" / "Notional aside,") so the desk disclosed the
+  // Wilson Family Trust holding (ORI-4471, 1,200 shares) instead of
+  // the delayed last. Strip those idioms when the question is also a
+  // last-print request. Genuine "What's the NVDA notional?" still
+  // routes to position.
+  if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)) {
+    s = s.replace(/\b(?:that(?:'s| is)|it(?:'s| is)|sounds?(?:\s+like)?)\s+(?:only\s+|purely\s+|just\s+|a\s+)?notional\b/g, " ")
+         .replace(/\b(?:only|purely|just)\s+notional\b/g, " ")
+         .replace(/\bthe\s+notional\s+aside\b/g, " ")
+         .replace(/\bnotional\s+aside\b/g, " ")
+         .replace(/\ba\s+notional\s+(?:figure|number|check)\b/g, " ")
+         .replace(/^notional\s*[:.,;]\s*/g, " ");
+  }
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
   if (/\b(filings?|filed|8-?k|10-?[kq]|13[dfghq]|insiders?|form ?[345]|sec|edgar|ownership|accession)\b/.test(s)) return "filings";
   if (/\b(news|why|drop|dropped|fell|falling|down|up|rose|move|moved|earthquake|macro)\b/.test(s)) return "news";
