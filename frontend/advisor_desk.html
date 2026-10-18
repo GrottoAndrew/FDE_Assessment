@@ -922,10 +922,23 @@ function resolve(text){
 /* One intent per question. Order matters: the refusals are checked before the
    answers, so a request that must be blocked cannot fall through to a price. */
 function classify(t){
-  const s = t.toLowerCase();
+  let s = t.toLowerCase();
   if (/\b(resolve|resolution|synonym|misspell|fat.?finger|alias|canonical)\b/.test(s)) return "resolution";
   if (/\b(should|recommend|buy|sell|good idea|worth (it|buying)|suitable)\b/.test(s)) return "advice";
   if (/\b(email|send|forward|client|draft.*(note|letter))\b/.test(s))                 return "clientfacing";
+  // Book nouns are bid/ask/spread/nbbo. Bare \bbid\b also matched
+  // "I bid you wait" / "that's my bid", so "I bid you wait,
+  // what's NVDA trading at?" returned INDETERMINATE (no bid/ask)
+  // instead of the delayed last. Strip those idioms when the
+  // question is also a last-print request. Genuine "What's the
+  // NVDA bid?" still routes to book.
+  if (/\b(prices?|quotes?|trad(e|es|ing)|last|current|now|at right now)\b/.test(s)) {
+    s = s.replace(/\b(?:i|we|they)\s+bid\s+(?:you|thee|him|her|them)(?:\s+to)?(?:\s+(?:wait|farewell|adieu|goodbye|good\s+(?:day|luck|morning|afternoon|evening)))?\b/g, " ")
+         .replace(/\blet\s+me\s+bid\s+you\b/g, " ")
+         .replace(/\bthat'?s\s+my\s+bid\b/g, " ")
+         .replace(/\btake\s+my\s+bid\b/g, " ")
+         .replace(/^bid\s*[:.,;]\s*/g, " ");
+  }
   if (/\b(bid|ask|spread|book|nbbo)\b/.test(s))                                       return "book";
   if (/\b(prior|previous|yesterday|last night|close[ds]?)\b/.test(s))                 return "prevclose";
   if (/\b(positions?|shares?|worth|hold(ing)?s?|notional|value)\b/.test(s))           return "position";
